@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CANVAS_W, CANVAS_H, ALL_TRACKS } from './track.js';
 import { loadProgress, resetProgress, xpToNext } from './progression.js';
+import { exportLog, getLog } from './sessionLog.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: 'MenuScene' }); }
@@ -48,6 +49,26 @@ export class MenuScene extends Phaser.Scene {
     resetBg.on('pointerover', () => resetBg.setFillStyle(0x250c0c));
     resetBg.on('pointerout',  () => resetBg.setFillStyle(0x160808));
     resetBg.on('pointerdown', () => { resetProgress(); this.scene.restart(); });
+
+    // Export log button
+    const logCount  = getLog().length;
+    const exportBg  = this.add.rectangle(CANVAS_W - 120, CANVAS_H - 34, 210, 30, 0x0a1820)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x224433);
+    this.exportLabel = this.add.text(CANVAS_W - 120, CANVAS_H - 34,
+      `EXPORT LOG (${logCount} runs)`, { fontSize: '12px', fontFamily: 'monospace', color: '#3a7755' }
+    ).setOrigin(0.5);
+    exportBg.on('pointerover', () => exportBg.setFillStyle(0x0e2230));
+    exportBg.on('pointerout',  () => exportBg.setFillStyle(0x0a1820));
+    exportBg.on('pointerdown', () => {
+      const n = exportLog();
+      this.exportLabel.setText(`COPIED! (${n} runs)`);
+      this.exportLabel.setColor('#66FFAA');
+      this.time.delayedCall(2000, () => {
+        this.exportLabel.setText(`EXPORT LOG (${n} runs)`);
+        this.exportLabel.setColor('#3a7755');
+      });
+    });
 
     this.add.text(CANVAS_W / 2, CANVAS_H - 20, 'Click a track or press 1 / 2 / 3', {
       fontSize: '13px', fontFamily: 'monospace', color: '#2a3a44'

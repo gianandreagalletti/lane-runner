@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
-import { MenuScene }   from './MenuScene.js';
-import { PlanScene }   from './PlanScene.js';
-import { RunScene }    from './RunScene.js';
-import { ResultScene } from './ResultScene.js';
+import { OnboardScene } from './OnboardScene.js';
+import { MenuScene }    from './MenuScene.js';
+import { PlanScene }    from './PlanScene.js';
+import { RunScene }     from './RunScene.js';
+import { ResultScene }  from './ResultScene.js';
 import { CANVAS_W, CANVAS_H } from './track.js';
 
 new Phaser.Game({
@@ -10,7 +11,7 @@ new Phaser.Game({
   width:           CANVAS_W,
   height:          CANVAS_H,
   backgroundColor: '#06080f',
-  scene:           [MenuScene, PlanScene, RunScene, ResultScene],
+  scene:           [OnboardScene, MenuScene, PlanScene, RunScene, ResultScene],
   parent:          document.body,
   scale: {
     mode:       Phaser.Scale.FIT,

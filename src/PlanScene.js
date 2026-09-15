@@ -31,9 +31,11 @@ export class PlanScene extends Phaser.Scene {
     this.trackData      = data.trackData;
     this.selectedBoosts = new Set();
     this.progress       = loadProgress();
+    this.planStart      = 0; // set in create() after Phaser is ready
   }
 
   create() {
+    this.planStart = Date.now();
     this.add.rectangle(CANVAS_W / 2, CANVAS_H / 2, CANVAS_W, CANVAS_H, 0x0d0d1a);
 
     this.add.text(CANVAS_W / 2, 16, `${this.trackData.name}  —  PLAN YOUR RUN`, {
@@ -86,11 +88,19 @@ export class PlanScene extends Phaser.Scene {
       }).setOrigin(0.5, 1);
     }
 
-    const BW = COL_W - 16, BH = 8;
+    const BW = COL_W - 16, BH = 12;
+    // Label letters + shape glyph so colorblind players can read the map
+    const TYPE_LABEL = { rock: 'R ✕', ice: 'I +', water: 'W ~' };
+    const LABEL_COL  = { rock: '#FFB8B0', ice: '#C8F0FF', water: '#C8FFFF' };
     for (const obs of this.trackData.obstacles) {
-      const ty = MAP_TOP + obs.distance * sc;
+      const ty  = MAP_TOP + obs.distance * sc;
+      const lx  = colLeft(obs.lane) + 8;
       g.fillStyle(OBS_COLORS[obs.type]);
-      g.fillRect(colLeft(obs.lane) + 8, ty - BH / 2, BW, BH);
+      g.fillRect(lx, ty - BH / 2, BW, BH);
+      // Short type label centered on block
+      this.add.text(lx + BW / 2, ty, TYPE_LABEL[obs.type], {
+        fontSize: '8px', fontFamily: 'monospace', color: LABEL_COL[obs.type]
+      }).setOrigin(0.5, 0.5);
     }
 
     const counts = this._countObs();
@@ -260,8 +270,9 @@ export class PlanScene extends Phaser.Scene {
   _tryStart() {
     if (this.selectedBoosts.size !== 3) return;
     this.scene.start('RunScene', {
-      trackData: this.trackData,
-      loadout:   Array.from(this.selectedBoosts)
+      trackData:      this.trackData,
+      loadout:        Array.from(this.selectedBoosts),
+      planningTimeMs: Date.now() - this.planStart
     });
   }
 }

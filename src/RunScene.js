@@ -1,336 +1,254 @@
 import Phaser from 'phaser';
-import { Player }    from './player.js';
-import { Obstacles } from './obstacles.js';
-import { BOOSTS }    from './boosts.js';
+import { Player }     from './player.js';
+import { Obstacles }  from './obstacles.js';
+import { BOOSTS }     from './boosts.js';
+import { spawnBurst } from './particles.js';
+import { appendLog }  from './sessionLog.js';
 import {
   CANVAS_W, CANVAS_H,
   LANE_WIDTH, LANE_GAP, LANE_START_X, LANE_COLORS,
-  BASE_SPEED
+  BASE_SPEED, LANE_CENTERS
 } from './track.js';
 
-// Reactive window: how long (ms) the player has to press a reactive boost
-// after a lethal collision before death resolves.
 const REACTIVE_WINDOW_MS = 250;
 
 export class RunScene extends Phaser.Scene {
   constructor() { super({ key: 'RunScene' }); }
 
   init(data) {
-    this.trackData = data.trackData;
-    this.loadout   = data.loadout;      // array of 3 boost IDs
-    this.boostSet  = new Set(data.loadout);
+    this.trackData      = data.trackData;
+    this.loadout        = data.loadout;
+    this.boostSet       = new Set(data.loadout);
+    this.planningTimeMs = data.planningTimeMs ?? 0;
   }
 
   create() {
     this.trackPosition  = 0;
     this.startTime      = this.time.now;
-    // gameState: 'RUNNING' | 'REACTIVE' | 'COMPLETE' | 'FAILED'
-    this.gameState      = 'RUNNING';
+    this.gameState      = 'RUNNING'; // 'RUNNING'|'REACTIVE'|'COMPLETE'|'FAILED'
 
-    // Sprint state (managed here, not in Player)
     this.sprintTimer      = 0;
     this.sprintMultiplier = 1;
+    this.reactiveTimer    = 0;
+    this.reactiveObs      = null;
 
-    // Reactive window state
-    this.reactiveTimer   = 0;
-    this.reactiveObs     = null; // the pending lethal obstacle
+    // Telemetry
+    this.laneTimeMs   = [0, 0, 0];
+    this.boostUseCount = {};
+    this.loadout.forEach(id => { this.boostUseCount[id] = 0; });
 
-    // Build per-slot boost state: { id, uses, isActive, isReactive }
     this.slots = this.loadout.map(id => {
       const b = BOOSTS[id];
-      return {
-        id,
-        uses:       b.type === 'active' ? b.usesPerRun : null,
-        isActive:   b.type === 'active',
-        isReactive: b.type === 'active' ? b.reactive : false
-      };
+      return { id, uses: b.type === 'active' ? b.usesPerRun : null,
+               isActive: b.type === 'active',
+               isReactive: b.type === 'active' ? b.reactive : false };
     });
 
-    // Lane backgrounds
     this.laneGfx = this.add.graphics();
     this._drawLanes();
 
-    // Obstacles
-    this.obstacles = new Obstacles(this, this.trackData);
-
-    // Player
-    this.player = new Player(this, {
-      instantSwitch: this.boostSet.has('quick_step')
-    });
-
-    // Reactive overlay (red flash — hidden until reactive window)
+    this.obstacles       = new Obstacles(this, this.trackData);
+    this.player          = new Player(this, { instantSwitch: this.boostSet.has('quick_step') });
     this.reactiveOverlay = this.add.graphics();
 
-    // HUD
+    // HUD — higher contrast colors
     this.distText = this.add.text(20, 14, '', {
-      fontSize: '18px', fontFamily: 'monospace', color: '#AAAAAA'
+      fontSize: '20px', fontFamily: 'monospace', color: '#DDDDDD', stroke: '#000000', strokeThickness: 3
     });
     this.speedText = this.add.text(CANVAS_W - 20, 14, '', {
-      fontSize: '18px', fontFamily: 'monospace', color: '#FFD966'
+      fontSize: '20px', fontFamily: 'monospace', color: '#FFE044', stroke: '#000000', strokeThickness: 3
     }).setOrigin(1, 0);
 
-    // Boost HUD (top center)
     this._buildBoostHud();
 
-    // Reactive countdown text (shown during reactive window)
-    this.reactiveText = this.add.text(CANVAS_W / 2, CANVAS_H / 2 - 60, '', {
-      fontSize: '32px', fontFamily: 'monospace', color: '#FFFF00', align: 'center'
+    this.reactiveText = this.add.text(CANVAS_W / 2, CANVAS_H / 2 - 70, '', {
+      fontSize: '36px', fontFamily: 'monospace', color: '#FFFF00',
+      align: 'center', stroke: '#000000', strokeThickness: 4
     }).setOrigin(0.5).setDepth(10);
 
-    // Input
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.key1 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
-    this.key2 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
-    this.key3 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
+    this.key1    = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
+    this.key2    = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
+    this.key3    = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
   }
 
   update(_t, delta) {
-    if (this.gameState === 'RUNNING') {
-      this._runUpdate(delta);
-    } else if (this.gameState === 'REACTIVE') {
-      this._reactiveUpdate(delta);
-    }
-    // COMPLETE / FAILED handled by ResultScene
+    if (this.gameState === 'RUNNING')  this._runUpdate(delta);
+    else if (this.gameState === 'REACTIVE') this._reactiveUpdate(delta);
   }
 
-  // ── Normal frame ──────────────────────────────────────────────────────────
-
   _runUpdate(delta) {
-    // Tick sprint
+    // Lane time tracking
+    this.laneTimeMs[this.player.lane] += delta;
+
     if (this.sprintTimer > 0) {
       this.sprintTimer -= delta;
-      if (this.sprintTimer <= 0) {
-        this.sprintTimer      = 0;
-        this.sprintMultiplier = 1;
-      }
+      if (this.sprintTimer <= 0) { this.sprintTimer = 0; this.sprintMultiplier = 1; }
     }
 
-    // Advance track
     const speed = BASE_SPEED * this.player.speedMultiplier * this.sprintMultiplier;
     this.trackPosition += speed * (delta / 1000);
 
-    // Lane input
     if (Phaser.Input.Keyboard.JustDown(this.cursors.left))  this.player.switchLane(-1);
     if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) this.player.switchLane(1);
-
-    // Active boost keys (non-reactive: sprint only)
     if (Phaser.Input.Keyboard.JustDown(this.key1)) this._tryActivate(0);
     if (Phaser.Input.Keyboard.JustDown(this.key2)) this._tryActivate(1);
     if (Phaser.Input.Keyboard.JustDown(this.key3)) this._tryActivate(2);
 
-    // Update subsystems
     this.player.update(delta);
     this.obstacles.update(this.trackPosition);
 
-    // Collision check
     const hit = this.obstacles.checkCollision(this.player.x);
     if (hit) {
-      if (hit.type === 'rock') {
-        // Lethal — enter reactive window
-        this._enterReactive(hit);
-        return;
-      }
-      // Non-lethal
+      if (hit.type === 'rock') { this._enterReactive(hit); return; }
       this.obstacles.markHit(hit);
       if (hit.type === 'ice'   && !this.boostSet.has('ice_grip'))     this.player.applyDebuff('ice');
       if (hit.type === 'water' && !this.boostSet.has('water_shield')) this.player.applyDebuff('water');
     }
 
-    // Completion
-    if (this.trackPosition >= this.trackData.length) {
-      this._endRun('COMPLETE');
-      return;
-    }
-
-    // HUD
+    if (this.trackPosition >= this.trackData.length) { this._endRun('COMPLETE'); return; }
     this._refreshHud();
   }
 
-  // ── Reactive window frame ─────────────────────────────────────────────────
-
   _reactiveUpdate(delta) {
     this.reactiveTimer -= delta;
-    // obstacles.update keeps screenY fresh so the pending obs stays visible
     this.obstacles.update(this.trackPosition);
 
-    // Pulse the red overlay based on time remaining
-    const frac    = Math.max(0, this.reactiveTimer / REACTIVE_WINDOW_MS);
-    const alpha   = 0.25 + 0.25 * Math.sin(Date.now() / 40); // pulse
+    const frac = Math.max(0, this.reactiveTimer / REACTIVE_WINDOW_MS);
     this.reactiveOverlay.clear();
-    this.reactiveOverlay.fillStyle(0xFF2200, alpha * frac + 0.1);
+    this.reactiveOverlay.fillStyle(0xFF2200, 0.15 + 0.3 * frac * (0.6 + 0.4 * Math.sin(Date.now() / 35)));
     this.reactiveOverlay.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Show reactive prompt with which keys can save them
-    const reactiveSlots = this.slots
-      .map((s, i) => ({ ...s, idx: i }))
-      .filter(s => s.isReactive && s.uses > 0);
-    const keyHints = reactiveSlots.map(s => `[${s.idx + 1}] ${BOOSTS[s.id].name}`).join('  ');
-    this.reactiveText.setText(keyHints ? `REACT!\n${keyHints}` : 'NO BOOST');
+    const reactSlots = this.slots.map((s,i) => ({...s,idx:i})).filter(s => s.isReactive && s.uses > 0);
+    const hints = reactSlots.map(s => `[${s.idx+1}] ${BOOSTS[s.id].name}`).join('  ');
+    this.reactiveText.setText(hints ? `REACT!\n${hints}` : 'NO BOOST');
 
-    // Check boost keys
     if (Phaser.Input.Keyboard.JustDown(this.key1)) this._tryReactiveBoost(0);
     if (Phaser.Input.Keyboard.JustDown(this.key2)) this._tryReactiveBoost(1);
     if (Phaser.Input.Keyboard.JustDown(this.key3)) this._tryReactiveBoost(2);
 
-    // Timer expired → death
-    if (this.reactiveTimer <= 0) {
-      this._resolveReactiveDeath();
-    }
+    if (this.reactiveTimer <= 0) this._resolveReactiveDeath();
   }
 
   _enterReactive(obs) {
-    this.gameState     = 'REACTIVE';
-    this.reactiveTimer = REACTIVE_WINDOW_MS;
-    this.reactiveObs   = obs;
-    this.obstacles.markPending(obs);
+    this.gameState = 'REACTIVE'; this.reactiveTimer = REACTIVE_WINDOW_MS;
+    this.reactiveObs = obs; this.obstacles.markPending(obs);
   }
 
   _tryReactiveBoost(slotIdx) {
     const slot = this.slots[slotIdx];
     if (!slot || !slot.isActive || !slot.isReactive || slot.uses <= 0) return;
+    if (slot.id === 'rock_break' && this.reactiveObs.type !== 'rock') return;
 
-    const id = slot.id;
-    if (id === 'rock_break' && this.reactiveObs.type !== 'rock') return;
-    // phase works on any lethal obstacle (currently only rock)
-
-    // Consume and cancel death
     slot.uses--;
+    this.boostUseCount[slot.id]++;
     this._refreshHudSlot(slotIdx);
+
+    // Particle burst at obstacle position
+    const obsX = LANE_CENTERS[this.reactiveObs.lane];
+    spawnBurst(this, obsX, this.reactiveObs.screenY, 0xFF6633, 16);
+
     this.obstacles.clearPending(this.reactiveObs);
     this.reactiveObs = null;
     this._clearReactive();
   }
 
   _resolveReactiveDeath() {
-    // Mark the obstacle as hit (it disappears), then end
-    if (this.reactiveObs) {
-      this.obstacles.markHit(this.reactiveObs);
-      this.reactiveObs = null;
-    }
+    if (this.reactiveObs) { this.obstacles.markHit(this.reactiveObs); this.reactiveObs = null; }
     this._clearReactive();
-    this._endRun('FAILED');
+    // Screen shake on death
+    this.cameras.main.shake(110, 0.022);
+    this.time.delayedCall(120, () => this._endRun('FAILED'));
   }
 
   _clearReactive() {
-    this.gameState = this.gameState === 'REACTIVE' ? 'RUNNING' : this.gameState;
+    if (this.gameState === 'REACTIVE') this.gameState = 'RUNNING';
     this.reactiveOverlay.clear();
     this.reactiveText.setText('');
   }
 
-  // ── Boost activation (non-reactive, during RUNNING) ───────────────────────
-
   _tryActivate(slotIdx) {
     const slot = this.slots[slotIdx];
-    if (!slot || !slot.isActive || slot.isReactive) return; // reactive-only = handled in reactive window
-    if (slot.uses <= 0) return;
-
+    if (!slot || !slot.isActive || slot.isReactive || slot.uses <= 0) return;
     if (slot.id === 'sprint') {
       slot.uses--;
-      this.sprintTimer      = 4000;
-      this.sprintMultiplier = 1.4;
+      this.boostUseCount[slot.id]++;
+      this.sprintTimer = 4000; this.sprintMultiplier = 1.4;
       this._refreshHudSlot(slotIdx);
     }
   }
 
-  // ── HUD ──────────────────────────────────────────────────────────────────
-
   _buildBoostHud() {
-    const spacing = 226;
-    const startX  = CANVAS_W / 2 - spacing;
+    const spacing = 226, startX = CANVAS_W / 2 - spacing;
     this.hudSlotRefs = [];
-
     this.slots.forEach((slot, i) => {
-      const x     = startX + i * spacing;
-      const boost = BOOSTS[slot.id];
-      const isP   = !slot.isActive;
-
-      const chip = this.add.rectangle(x, 22, 204, 30, isP ? 0x162a20 : 0x1e1614)
-        .setStrokeStyle(1, isP ? 0x336644 : 0x443322);
-
-      this.add.text(x - 72, 22, `[${i + 1}]`, {
-        fontSize: '11px', fontFamily: 'monospace', color: '#334455'
+      const x = startX + i * spacing, boost = BOOSTS[slot.id], isP = !slot.isActive;
+      const chip = this.add.rectangle(x, 22, 210, 30, isP ? 0x142a1e : 0x201610)
+        .setStrokeStyle(1, isP ? 0x338844 : 0x554422);
+      this.add.text(x - 78, 22, `[${i+1}]`, { fontSize:'11px', fontFamily:'monospace', color:'#556677' }).setOrigin(0,0.5);
+      const nameT = this.add.text(x - 58, 22, boost.name, {
+        fontSize:'13px', fontFamily:'monospace', color: isP ? '#AAFFCC' : '#FFCC88'
       }).setOrigin(0, 0.5);
-
-      const nameT = this.add.text(x - 52, 22, boost.name, {
-        fontSize: '13px', fontFamily: 'monospace',
-        color: isP ? '#88DDAA' : '#AA9966'
-      }).setOrigin(0, 0.5);
-
       let usesT = null;
       if (slot.isActive) {
-        usesT = this.add.text(x + 72, 22, this._usesLabel(slot), {
-          fontSize: '12px', fontFamily: 'monospace', color: '#44FF88'
+        usesT = this.add.text(x + 76, 22, this._usesLabel(slot), {
+          fontSize:'13px', fontFamily:'monospace', color:'#55FF88', stroke:'#000', strokeThickness:2
         }).setOrigin(1, 0.5);
       } else {
-        this.add.text(x + 72, 22, 'ACTIVE', {
-          fontSize: '11px', fontFamily: 'monospace', color: '#44FF88'
-        }).setOrigin(1, 0.5);
+        this.add.text(x + 76, 22, 'ON', { fontSize:'12px', fontFamily:'monospace', color:'#55FF88', stroke:'#000',strokeThickness:2 }).setOrigin(1,0.5);
       }
-
       this.hudSlotRefs.push({ chip, nameT, usesT });
     });
-
-    // Sprint timer text (below HUD)
-    this.sprintText = this.add.text(CANVAS_W / 2, 48, '', {
-      fontSize: '14px', fontFamily: 'monospace', color: '#FFDD44'
+    this.sprintText = this.add.text(CANVAS_W / 2, 50, '', {
+      fontSize:'14px', fontFamily:'monospace', color:'#FFEE55', stroke:'#000', strokeThickness:2
     }).setOrigin(0.5, 0);
   }
 
-  _usesLabel(slot) {
-    if (slot.uses === null) return '';
-    return slot.uses > 0 ? `×${slot.uses}` : 'SPENT';
-  }
+  _usesLabel(slot) { return slot.uses > 0 ? `×${slot.uses}` : 'SPENT'; }
 
-  _refreshHudSlot(slotIdx) {
-    const ref  = this.hudSlotRefs[slotIdx];
-    const slot = this.slots[slotIdx];
+  _refreshHudSlot(i) {
+    const ref = this.hudSlotRefs[i], slot = this.slots[i];
     if (!ref.usesT) return;
     ref.usesT.setText(this._usesLabel(slot));
-    ref.usesT.setColor(slot.uses > 0 ? '#44FF88' : '#443333');
-    ref.nameT.setColor(slot.uses > 0 ? '#AA9966' : '#554444');
-    ref.chip.setStrokeStyle(1, slot.uses > 0 ? 0x443322 : 0x2a1a1a);
+    ref.usesT.setColor(slot.uses > 0 ? '#55FF88' : '#553333');
+    ref.nameT.setColor(slot.uses > 0 ? '#FFCC88' : '#554444');
   }
 
   _refreshHud() {
-    this.distText.setText(`DIST: ${Math.floor(this.trackPosition)} / ${this.trackData.length}`);
-
-    // Speed display: debuff and/or sprint
+    this.distText.setText(`${Math.floor(this.trackPosition)} / ${this.trackData.length}`);
     const parts = [];
-    if (this.player.debuffType) {
-      const pct = Math.round(this.player.speedMultiplier * 100);
-      parts.push(`SLOWED ${pct}%`);
-    }
-    if (this.sprintTimer > 0) {
-      const secs = (this.sprintTimer / 1000).toFixed(1);
-      this.sprintText.setText(`SPRINT ${secs}s`);
-    } else {
-      this.sprintText.setText('');
-    }
+    if (this.player.debuffType) parts.push(`SLOWED ${Math.round(this.player.speedMultiplier*100)}%`);
     this.speedText.setText(parts.join('  '));
+    this.sprintText.setText(this.sprintTimer > 0 ? `SPRINT ${(this.sprintTimer/1000).toFixed(1)}s` : '');
   }
-
-  // ── Lane drawing ──────────────────────────────────────────────────────────
 
   _drawLanes() {
     for (let i = 0; i < 3; i++) {
       const x = LANE_START_X + i * (LANE_WIDTH + LANE_GAP);
-      this.laneGfx.fillStyle(LANE_COLORS[i]);
-      this.laneGfx.fillRect(x, 0, LANE_WIDTH, CANVAS_H);
-      this.laneGfx.lineStyle(1, 0xFFFFFF, 0.08);
-      this.laneGfx.strokeRect(x, 0, LANE_WIDTH, CANVAS_H);
+      this.laneGfx.fillStyle(LANE_COLORS[i]); this.laneGfx.fillRect(x, 0, LANE_WIDTH, CANVAS_H);
+      this.laneGfx.lineStyle(1, 0xFFFFFF, 0.08); this.laneGfx.strokeRect(x, 0, LANE_WIDTH, CANVAS_H);
     }
   }
 
-  // ── End run ───────────────────────────────────────────────────────────────
-
   _endRun(result) {
     this.gameState = result;
-    const elapsed  = parseFloat(((this.time.now - this.startTime) / 1000).toFixed(2));
-    const distance = Math.floor(this.trackPosition);
+    const elapsedMs = this.time.now - this.startTime;
+    const distance  = Math.floor(this.trackPosition);
+
+    appendLog({
+      track:          this.trackData.id,
+      loadout:        this.loadout,
+      outcome:        result === 'COMPLETE' ? 'complete' : 'failed',
+      distance,
+      elapsedMs:      Math.round(elapsedMs),
+      boostUses:      { ...this.boostUseCount },
+      laneTimeMs:     [...this.laneTimeMs],
+      planningTimeMs: this.planningTimeMs
+    });
+
     this.scene.start('ResultScene', {
-      result, distance, elapsed,
-      trackData: this.trackData,
-      loadout:   this.loadout
+      result, distance, elapsed: parseFloat((elapsedMs / 1000).toFixed(2)),
+      trackData: this.trackData, loadout: this.loadout
     });
   }
 }

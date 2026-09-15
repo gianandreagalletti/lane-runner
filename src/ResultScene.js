@@ -74,13 +74,19 @@ export class ResultScene extends Phaser.Scene {
 
   _drawXpSection(isWin, y) {
     const state = loadProgress();
-    const before = { level: state.level, totalXP: state.totalXP };
     const { gained, levelsGained } = awardXP(state, this.distance, isWin);
 
-    // XP gained line
-    this.add.text(CANVAS_W / 2, y, `+${gained} XP`, {
-      fontSize: '24px', fontFamily: 'monospace', color: '#DDCC44'
-    }).setOrigin(0.5);
+    // Animated XP pop-up: starts at y+30, floats up to y, fades in
+    const xpPop = this.add.text(CANVAS_W / 2, y + 40, `+${gained} XP`, {
+      fontSize: '32px', fontFamily: 'monospace', color: '#FFE044',
+      stroke: '#000000', strokeThickness: 3
+    }).setOrigin(0.5).setAlpha(0);
+
+    this.tweens.add({
+      targets: xpPop, y: y, alpha: 1,
+      duration: 500, ease: 'Back.easeOut',
+      delay: 200
+    });
 
     // Level-up announcements
     let offsetY = y + 36;
