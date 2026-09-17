@@ -231,6 +231,10 @@ export const TRACK_3 = {
 
 export const ALL_TRACKS = [TRACK_1, TRACK_2, TRACK_3];
 
+export function getTrackById(id) {
+  return ALL_TRACKS.find(t => t.id === id) || null;
+}
+
 // ─── Split-screen geometry (2-player mode) ────────────────────────────────────
 export const SPLIT_HALF_W       = 640;
 export const SPLIT_LANE_WIDTH   = 140;

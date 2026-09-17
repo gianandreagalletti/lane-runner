@@ -1,4 +1,16 @@
-const LOG_KEY = 'laneRunner.log';
+const LOG_KEY    = 'laneRunner.log';
+const REPLAY_KEY = 'laneRunner.lastReplay';
+
+export function saveReplay(matchConfig, intents, outcome) {
+  try { localStorage.setItem(REPLAY_KEY, JSON.stringify({ matchConfig, intents, originalOutcome: outcome })); } catch {}
+}
+
+export function loadReplay() {
+  try {
+    const raw = localStorage.getItem(REPLAY_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
 
 export function appendLog(entry) {
   let log = [];

@@ -1,7 +1,8 @@
+// Visual-only effects. Math.random() here is intentionally unseeded — cosmetic scatter, not gameplay.
 /**
  * Visual effects for reactive boosts.
  * Rock Break — heavy shatter with fragments, camera shake, dust puff.
- * Phase       — translucency flash on player, expanding ripple rings.
+ * Phase       — expanding ripple rings (drawAlpha is managed by the sim, not here).
  */
 
 /**
@@ -90,14 +91,7 @@ export function phaseEffect(scene, player, obs, laneCenterX) {
   const cx = laneCenterX;
   const cy = obs.screenY;
 
-  // Player translucency: drop to 0.4, tween back to 1.0 over 300ms
-  player.drawAlpha = 0.4;
-  scene.tweens.add({
-    targets:  player,
-    drawAlpha: 1.0,
-    duration: 300,
-    ease:     'Sine.easeIn'
-  });
+  // Note: drawAlpha is managed by the sim (drawAlphaTicksLeft). No tween here.
 
   // Two expanding rings
   for (let ring = 0; ring < 2; ring++) {
