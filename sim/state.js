@@ -2,12 +2,13 @@ import { BOOSTS } from '../src/boosts.js';
 import { POSITION_SCALE } from './rules.js';
 
 export function createInitialState(matchConfig, trackData) {
+  const numPlayers = matchConfig.players.length;
   const obstacles = trackData.obstacles.map(o => ({
     lane:            o.lane,
     distanceScaled:  o.distance * POSITION_SCALE,
     type:            o.type,
-    hitByPlayer:     [false, false],
-    pendingByPlayer: [false, false]
+    hitByPlayer:     new Array(numPlayers).fill(false),
+    pendingByPlayer: new Array(numPlayers).fill(false)
   }));
 
   const players = matchConfig.players.map(pc => {
@@ -52,6 +53,7 @@ export function createInitialState(matchConfig, trackData) {
     tick:              0,
     mode:              matchConfig.mode,
     trackLength:       trackData.length * POSITION_SCALE,
+    numPlayers,
     obstacles,
     players,
     camPositionScaled: 0,

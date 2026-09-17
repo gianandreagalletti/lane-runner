@@ -35,9 +35,9 @@ export function step(state, intents) {
 
   for (const ps of s.players) _tickPlayer(s, ps);
 
-  if (s.mode === '2p') {
+  if (s.mode !== '1p') {
     _checkGapElimination(s);
-    s.camPositionScaled = Math.max(s.players[0].trackPosition, s.players[1].trackPosition);
+    s.camPositionScaled = Math.max(...s.players.map(ps => ps.trackPosition));
     s.ended = s.players.every(ps => !_isActive(ps));
   } else {
     s.ended = !_isActive(s.players[0]);
@@ -162,7 +162,8 @@ function _tryReactiveBoost(s, ps, slotIdx) {
   sl.uses--; ps.boostUseCount[sl.id]++;
   ps.boostPressTimer[slotIdx] = 0;
   if (sl.id === 'rock_break') {
-    obs.hitByPlayer = [true, true]; obs.pendingByPlayer = [false, false];
+    obs.hitByPlayer = obs.hitByPlayer.map(() => true);
+    obs.pendingByPlayer = obs.pendingByPlayer.map(() => false);
     s.events.push({ type: 'rock_break', playerIdx: ps.idx, obsLane: obs.lane, obsDistScaled: obs.distanceScaled });
   } else {
     obs.hitByPlayer[ps.idx] = true; obs.pendingByPlayer[ps.idx] = false;
@@ -184,12 +185,14 @@ function _resolveReactiveDeath(s, ps) {
 }
 
 function _checkGapElimination(s) {
-  const [a, b] = s.players;
-  if (!_isActive(a) || !_isActive(b)) return;
-  const gap = Math.abs(a.trackPosition - b.trackPosition);
-  if (gap >= GAP_ELIMINATION_SCALED) {
-    const trailer = a.trackPosition < b.trackPosition ? a : b;
-    trailer.gs = 'LEFT BEHIND'; trailer.gsEndTick = s.tick;
-    s.events.push({ type: 'left_behind', playerIdx: trailer.idx });
+  const active = s.players.filter(_isActive);
+  if (active.length < 2) return;
+  const leaderPos = Math.max(...active.map(ps => ps.trackPosition));
+  for (const ps of active) {
+    const gap = leaderPos - ps.trackPosition;
+    if (gap >= GAP_ELIMINATION_SCALED) {
+      ps.gs = 'LEFT BEHIND'; ps.gsEndTick = s.tick;
+      s.events.push({ type: 'left_behind', playerIdx: ps.idx });
+    }
   }
 }
