@@ -1,3 +1,70 @@
+# Session 5 — Centi-units, Levelled Passives, Shop UI
+
+## Clean run timing
+
+Headless sim (Track 1, ice_grip L2 + water_shield L2 + quick_step L1, rock_break ×3,
+AI lane-switch avoidance): COMPLETE in 2808 ticks (~46.8s).
+Target was ~40s; gap is explained by L2 passive debuffs still slowing the player on
+ice and water tiles. A player with pure sprint charges instead would be faster.
+Bare minimum (no passives, no actives, perfect lane navigation): ~24s at 500 cu/tick.
+
+## Centi-units design
+
+Previous: `POSITION_SCALE = 30`, speed in display-unit sub-integers (100 cu/tick at base).
+Session 5: `CENTI_SCALE = 100`, `BASE_SPEED_CU = 500` (5 display units/tick = 300 display units/s).
+All speed factors are integer percentages — `Math.floor(500 * factorPct / 100)` produces
+exact integers for every factor defined in BOOST_CONFIG. No floating-point drift.
+
+Speed values verified:
+- Base 100%  → 500 cu/tick
+- Sprint 140% → 700 cu/tick
+- Ice L0 50%  → 250  Water L0 30% → 150
+- Ice L1 62%  → 310  Water L1 47% → 235
+- Ice L2 75%  → 375  Water L2 65% → 325
+
+## Loadout format change
+
+Old: `['ice_grip', 'rock_break', 'sprint']`  (pick-3 set)
+New: `{ passives: { ice_grip: 2, water_shield: 0, quick_step: 1 }, actives: { rock_break: 2, sprint: 0, phase: 0 } }`
+
+`createInitialState` accepts both formats (legacy array converted internally).
+`sessionLog.appendLog` normalises to new format before persisting.
+`ResultScene._loadoutToDisplayList` converts either format for display.
+
+## Shop UI (PlanScene)
+
+Replaced pick-3 with levelled shop:
+- Passives: 3 rows (ice_grip, water_shield, quick_step) with [-][+] level steppers.
+  Level 2 requires level 1 already bought. Budget enforced: never goes negative.
+- Actives: 3 rows (rock_break, sprint, phase) with [-][+] charge steppers.
+- Unspent points allowed — confirm any time.
+- 1P: ENTER to confirm, mouse click also works.
+- MP: each player has a panel; dedicated nav keys per player; CONFIRM button locks in.
+
+## Phase restrictions (clarified in sim/step.js)
+
+- Phase does NOT work on rocks (only ice/water).
+- Phase does NOT participate in the reactive window — pressing phase during REACTIVE state
+  is silently ignored. Only slot 0 (rock_break) can cancel a lethal rock in reactive.
+- quick_step L2 = instant lane switch (0 ticks animation).
+
+## Camera zoom threshold
+
+Changed from 500 to 750 display units spread before zoom kicks in.
+Formula: `zoom = max(0.75, 1.0 - (spread / 750) * 0.25)`
+
+## Design notes (from spec)
+
+- PASSIVE_POINTS and ACTIVE_POINTS are both 6. Spending all 6 passive points buys:
+  ice_grip L2 (1+2=3) + water_shield L1 (1) + quick_step L1 (1) = 5, or any other
+  combo totalling ≤6. Encourages specialisation.
+- rock_break and phase share the active pool; each rock_break charge costs 2pts,
+  each phase charge 1pt. Sprint costs 2pt/charge. Full rock_break (3×) costs 6pts alone.
+- The no-all-rocks-in-3-lanes constraint is asserted at runtime in createInitialState,
+  not just at build time.
+
+---
+
 # Session 4J — Three Players & Xbox Gamepads
 
 ## Key decisions
