@@ -6,25 +6,37 @@ import {
   OBS_COLORS
 } from './track.js';
 
-const COL_HALF_X = OBS_W / 2 + 20; // 100
-const COL_HALF_Y = OBS_H / 2 + 20; // 50
-
 export class Obstacles {
-  constructor(scene, trackData) {
+  constructor(scene, trackData, opts = {}) {
     this.scene = scene;
+
+    // numPlayers controls draw behaviour:
+    //   1 → hide obstacle once player 0 has resolved it  (1P behaviour, unchanged)
+    //   2 → always draw; each player resolves independently
+    this.numPlayers  = opts.numPlayers || 1;
+    this.laneCenters = opts.laneCenters || LANE_CENTERS;
+    this.obsW = opts.obsW || OBS_W;
+    this.obsH = opts.obsH || OBS_H;
+    this.sx = this.obsW / OBS_W;
+    this.sy = this.obsH / OBS_H;
+    this.colHalfX = this.obsW / 2 + 20 * this.sx;
+    this.colHalfY = this.obsH / 2 + 20 * this.sy;
+
     this.list = trackData.obstacles.map(o => ({
       lane:     o.lane,
       distance: o.distance,
       type:     o.type,
-      hit:      false,
-      pending:  false,
-      screenY:  -9999
+      // per-player resolved flags (index = player idx)
+      hitByPlayer:     [false, false],
+      pendingByPlayer: [false, false],
+      screenY: -9999
     }));
     this.graphics    = scene.add.graphics();
-    this.labelGraphs = scene.add.graphics(); // unused — labels are text objects
+    this.labelGraphs = scene.add.graphics();
     this.labels      = [];
   }
 
+  // trackPosition should be the camera reference (leader's position in 2P)
   update(trackPosition) {
     for (const obs of this.list) {
       obs.screenY = PLAYER_Y + trackPosition - obs.distance;
@@ -32,19 +44,20 @@ export class Obstacles {
     this._draw();
   }
 
-  checkCollision(playerX) {
+  // playerScreenY defaults to PLAYER_Y so 1P callers don't need to change.
+  checkCollision(playerX, playerScreenY = PLAYER_Y, playerIdx = 0) {
     for (const obs of this.list) {
-      if (obs.hit || obs.pending) continue;
-      const dx = Math.abs(playerX - LANE_CENTERS[obs.lane]);
-      const dy = Math.abs(obs.screenY - PLAYER_Y);
-      if (dx < COL_HALF_X && dy < COL_HALF_Y) return obs;
+      if (obs.hitByPlayer[playerIdx] || obs.pendingByPlayer[playerIdx]) continue;
+      const dx = Math.abs(playerX - this.laneCenters[obs.lane]);
+      const dy = Math.abs(obs.screenY - playerScreenY);
+      if (dx < this.colHalfX && dy < this.colHalfY) return obs;
     }
     return null;
   }
 
-  markHit(obs)     { obs.hit = true; obs.pending = false; }
-  markPending(obs) { obs.pending = true; }
-  clearPending(obs){ obs.pending = false; obs.hit = true; }
+  markHit(obs, playerIdx = 0)     { obs.hitByPlayer[playerIdx] = true;  obs.pendingByPlayer[playerIdx] = false; }
+  markPending(obs, playerIdx = 0) { obs.pendingByPlayer[playerIdx] = true; }
+  clearPending(obs, playerIdx = 0){ obs.pendingByPlayer[playerIdx] = false; obs.hitByPlayer[playerIdx] = true; }
 
   destroy() { this.graphics.destroy(); }
 
@@ -52,86 +65,83 @@ export class Obstacles {
     const g = this.graphics;
     g.clear();
     for (const obs of this.list) {
-      if (obs.hit) continue;
-      const sy = obs.screenY;
-      if (sy < -OBS_H - 2 || sy > this.scene.scale.height + OBS_H) continue;
+      // In 1P: skip once player 0 has resolved it (original behaviour).
+      // In 2P: always draw — each player resolves independently.
+      if (this.numPlayers === 1 && obs.hitByPlayer[0]) continue;
 
-      const cx   = LANE_CENTERS[obs.lane];
-      const left = cx - OBS_W / 2;
-      const top  = sy  - OBS_H / 2;
+      const sy = obs.screenY;
+      if (sy < -this.obsH - 2 || sy > this.scene.scale.height + this.obsH) continue;
+
+      const cx   = this.laneCenters[obs.lane];
+      const left = cx - this.obsW / 2;
+      const top  = sy  - this.obsH / 2;
 
       g.fillStyle(OBS_COLORS[obs.type]);
-      g.fillRect(left, top, OBS_W, OBS_H);
+      g.fillRect(left, top, this.obsW, this.obsH);
 
       if (obs.type === 'rock')  this._drawRock(g, left, top, cx, sy);
       if (obs.type === 'ice')   this._drawIce(g, left, top, cx, sy);
       if (obs.type === 'water') this._drawWater(g, left, top, cx, sy);
 
-      if (obs.pending) {
+      const isPending = obs.pendingByPlayer[0] || obs.pendingByPlayer[1];
+      if (isPending) {
         g.lineStyle(4, 0xFFFF00, 0.9);
-        g.strokeRect(left - 2, top - 2, OBS_W + 4, OBS_H + 4);
+        g.strokeRect(left - 2, top - 2, this.obsW + 4, this.obsH + 4);
       } else {
         g.lineStyle(2, 0x000000, 0.3);
-        g.strokeRect(left, top, OBS_W, OBS_H);
+        g.strokeRect(left, top, this.obsW, this.obsH);
       }
     }
   }
 
-  // ── ROCK: bold X mark (danger / stop) ────────────────────────────────────
-  // Shape works in full greyscale — the X is the primary identifier.
+  // ── ROCK: bold X mark ──────────────────────────────────────────────────────
   _drawRock(g, left, top, cx, cy) {
-    // Dark rough patches
+    const { sx, sy } = this;
     g.fillStyle(0x5A1510, 0.5);
-    g.fillRect(left + 14, top + 10, 26, 14);
-    g.fillRect(left + 68, top +  6, 20, 18);
-    g.fillRect(left + 108, top + 18, 30, 14);
-
-    // Bold X — the unique shape marker
-    const hw = 22, hh = 18;
+    g.fillRect(left + 14*sx, top + 10*sy, 26*sx, 14*sy);
+    g.fillRect(left + 68*sx, top +  6*sy, 20*sx, 18*sy);
+    g.fillRect(left + 108*sx, top + 18*sy, 30*sx, 14*sy);
+    const hw = 22*sx, hh = 18*sy;
     g.lineStyle(5, 0x2A0808, 0.9);
     g.beginPath(); g.moveTo(cx - hw, cy - hh); g.lineTo(cx + hw, cy + hh); g.strokePath();
     g.beginPath(); g.moveTo(cx + hw, cy - hh); g.lineTo(cx - hw, cy + hh); g.strokePath();
   }
 
-  // ── ICE: snowflake cross (+ shape) ───────────────────────────────────────
-  // Vertical + horizontal lines, distinct from rock's X and water's waves.
+  // ── ICE: snowflake cross ───────────────────────────────────────────────────
   _drawIce(g, left, top, cx, cy) {
-    // Background diagonal hatching
+    const { sx, sy, obsW, obsH } = this;
+    const right = left + obsW, bottom = top + obsH;
     g.lineStyle(1, 0x7BB8D8, 0.45);
-    const right = left + OBS_W, bottom = top + OBS_H;
-    for (let i = -OBS_H; i < OBS_W; i += 20) {
-      let x1 = left + i, y1 = bottom, x2 = left + i + OBS_H, y2 = top;
-      if (x1 < left)  { const t=(left-x1)/OBS_H;  x1=left;  y1=bottom-t*OBS_H; }
-      if (x2 > right) { const t=(x2-right)/OBS_H; x2=right; y2=top+t*OBS_H; }
+    for (let i = -obsH; i < obsW; i += 20 * sx) {
+      let x1 = left + i, y1 = bottom, x2 = left + i + obsH, y2 = top;
+      if (x1 < left)  { const t = (left - x1) / obsH;  x1 = left;  y1 = bottom - t * obsH; }
+      if (x2 > right) { const t = (x2 - right) / obsH; x2 = right; y2 = top + t * obsH; }
       if (x1 >= right || x2 <= left) continue;
-      g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.strokePath();
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath();
     }
-    // Bold + cross (snowflake shape) — the unique shape marker
     g.lineStyle(4, 0x2255AA, 0.85);
-    g.beginPath(); g.moveTo(cx, cy - 22); g.lineTo(cx, cy + 22); g.strokePath();
-    g.beginPath(); g.moveTo(cx - 34, cy); g.lineTo(cx + 34, cy); g.strokePath();
-    // Short crossbars on each arm tip
+    g.beginPath(); g.moveTo(cx, cy - 22*sy); g.lineTo(cx, cy + 22*sy); g.strokePath();
+    g.beginPath(); g.moveTo(cx - 34*sx, cy); g.lineTo(cx + 34*sx, cy); g.strokePath();
     g.lineStyle(3, 0x2255AA, 0.7);
-    for (const [dx, dy] of [[0,-22],[0,22],[-34,0],[34,0]]) {
+    for (const [dx, dy] of [[0, -22*sy], [0, 22*sy], [-34*sx, 0], [34*sx, 0]]) {
       const px = cx + dx, py = cy + dy;
-      const perp = Math.abs(dx) > 0 ? [0, 6] : [6, 0];
-      g.beginPath(); g.moveTo(px-perp[0],py-perp[1]); g.lineTo(px+perp[0],py+perp[1]); g.strokePath();
+      const perp = Math.abs(dx) > 0 ? [0, 6*sy] : [6*sx, 0];
+      g.beginPath(); g.moveTo(px - perp[0], py - perp[1]); g.lineTo(px + perp[0], py + perp[1]); g.strokePath();
     }
   }
 
-  // ── WATER: wave arcs + filled circles (~ shape) ──────────────────────────
-  // Dots on wave lines distinguish water from the straight lines of ice.
+  // ── WATER: wave lines + circles ───────────────────────────────────────────
   _drawWater(g, left, top, cx, cy) {
+    const { sx, sy, obsW, obsH } = this;
+    const right = left + obsW;
     g.lineStyle(2, 0x1E6888, 0.7);
-    const right = left + OBS_W;
-    for (let dy = 12; dy < OBS_H; dy += 14) {
-      g.beginPath(); g.moveTo(left + 10, top + dy); g.lineTo(right - 10, top + dy); g.strokePath();
+    for (let dy = 12*sy; dy < obsH; dy += 14*sy) {
+      g.beginPath(); g.moveTo(left + 10*sx, top + dy); g.lineTo(right - 10*sx, top + dy); g.strokePath();
     }
-    // Circles on the lines — the unique shape marker
     g.fillStyle(0x1E6888, 0.75);
-    for (let dy = 12; dy < OBS_H; dy += 14) {
-      for (let dx = 20; dx < OBS_W - 10; dx += 36) {
-        g.fillCircle(left + dx, top + dy, 4);
+    for (let dy = 12*sy; dy < obsH; dy += 14*sy) {
+      for (let dx = 20*sx; dx < obsW - 10*sx; dx += 36*sx) {
+        g.fillCircle(left + dx, top + dy, 4 * Math.min(sx, sy));
       }
     }
   }

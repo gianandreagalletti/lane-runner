@@ -6,6 +6,10 @@ import { exportLog, getLog } from './sessionLog.js';
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: 'MenuScene' }); }
 
+  init(data) {
+    this.mode = data?.mode || '1p';
+  }
+
   create() {
     this.progress = loadProgress();
 
@@ -29,6 +33,9 @@ export class MenuScene extends Phaser.Scene {
     // Progression badge
     this._drawProgressBadge();
 
+    // Mode toggle (1P / 2P)
+    this._drawModeToggle(292);
+
     // Track buttons
     const trackDescs = [
       '4 000 units · 10 bands · intro',
@@ -36,10 +43,10 @@ export class MenuScene extends Phaser.Scene {
       '5 500 units · 15 bands · no single lane survives'
     ];
     ALL_TRACKS.forEach((track, i) => {
-      this._trackBtn(CANVAS_W / 2, 318 + i * 90, track, trackDescs[i], i + 1);
+      this._trackBtn(CANVAS_W / 2, 338 + i * 90, track, trackDescs[i], i + 1);
     });
 
-    // Reset progress button
+    // Bottom bar: Reset | Controls | Export
     const resetBg = this.add.rectangle(108, CANVAS_H - 34, 188, 30, 0x160808)
       .setInteractive({ useHandCursor: true })
       .setStrokeStyle(1, 0x442222);
@@ -48,9 +55,18 @@ export class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
     resetBg.on('pointerover', () => resetBg.setFillStyle(0x250c0c));
     resetBg.on('pointerout',  () => resetBg.setFillStyle(0x160808));
-    resetBg.on('pointerdown', () => { resetProgress(); this.scene.restart(); });
+    resetBg.on('pointerdown', () => { resetProgress(); this.scene.restart({ mode: this.mode }); });
 
-    // Export log button
+    const ctrlBg = this.add.rectangle(CANVAS_W / 2, CANVAS_H - 34, 160, 30, 0x0d1520)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x223344);
+    this.add.text(CANVAS_W / 2, CANVAS_H - 34, 'CONTROLS', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#446688'
+    }).setOrigin(0.5);
+    ctrlBg.on('pointerover', () => ctrlBg.setFillStyle(0x111e2e));
+    ctrlBg.on('pointerout',  () => ctrlBg.setFillStyle(0x0d1520));
+    ctrlBg.on('pointerdown', () => this.scene.start('ControlsScene'));
+
     const logCount  = getLog().length;
     const exportBg  = this.add.rectangle(CANVAS_W - 120, CANVAS_H - 34, 210, 30, 0x0a1820)
       .setInteractive({ useHandCursor: true })
@@ -70,8 +86,8 @@ export class MenuScene extends Phaser.Scene {
       });
     });
 
-    this.add.text(CANVAS_W / 2, CANVAS_H - 20, 'Click a track or press 1 / 2 / 3', {
-      fontSize: '13px', fontFamily: 'monospace', color: '#2a3a44'
+    this.add.text(CANVAS_W / 2, CANVAS_H - 16, 'Click a track or press 1 / 2 / 3', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#1e2e38'
     }).setOrigin(0.5);
 
     this.input.keyboard.on('keydown-ONE',   () => this._go(ALL_TRACKS[0]));
@@ -90,10 +106,9 @@ export class MenuScene extends Phaser.Scene {
       fontSize: '17px', fontFamily: 'monospace', color: '#88AACC'
     }).setOrigin(0.5);
 
-    // XP progress bar
     const barW = 240, barH = 7, barX = cx - barW / 2;
     const nextThresh = 100 * (level + 1);
-    const prevThresh = 100 * level;           // threshold for current level
+    const prevThresh = 100 * level;
     const fill = Math.min(1, Math.max(0, (totalXP - prevThresh) / (nextThresh - prevThresh)));
 
     const bg2 = this.add.graphics();
@@ -104,6 +119,30 @@ export class MenuScene extends Phaser.Scene {
     this.add.text(cx, y + 30, `${totalXP} XP  ·  ${xpN} to next level`, {
       fontSize: '11px', fontFamily: 'monospace', color: '#3a4f66'
     }).setOrigin(0.5);
+  }
+
+  _drawModeToggle(y) {
+    const cx = CANVAS_W / 2;
+    const is1P = this.mode === '1p';
+
+    const p1Bg = this.add.rectangle(cx - 66, y, 110, 28,
+      is1P ? 0x162840 : 0x0d1520)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, is1P ? 0x3366AA : 0x1a2a3a);
+    this.add.text(cx - 66, y, '1 PLAYER', {
+      fontSize: '13px', fontFamily: 'monospace', color: is1P ? '#88BBEE' : '#2a3a4a'
+    }).setOrigin(0.5);
+
+    const p2Bg = this.add.rectangle(cx + 66, y, 110, 28,
+      !is1P ? 0x162840 : 0x0d1520)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, !is1P ? 0x3366AA : 0x1a2a3a);
+    this.add.text(cx + 66, y, '2 PLAYERS', {
+      fontSize: '13px', fontFamily: 'monospace', color: !is1P ? '#88BBEE' : '#2a3a4a'
+    }).setOrigin(0.5);
+
+    p1Bg.on('pointerdown', () => { if (this.mode !== '1p') this.scene.restart({ mode: '1p' }); });
+    p2Bg.on('pointerdown', () => { if (this.mode !== '2p') this.scene.restart({ mode: '2p' }); });
   }
 
   _trackBtn(x, y, track, desc, hotkey) {
@@ -124,6 +163,6 @@ export class MenuScene extends Phaser.Scene {
   }
 
   _go(track) {
-    this.scene.start('PlanScene', { trackData: track });
+    this.scene.start('PlanScene', { trackData: track, mode: this.mode });
   }
 }

@@ -11,7 +11,7 @@ const PANELS = [
       'Your runner advances automatically —',
       'you never control speed directly.',
       '',
-      '← → Arrow keys switch lanes.',
+      'A / D  or  ← →  switch lanes.',
       '',
       'Rocks kill you instantly.',
       'Ice and Water slow you down.',

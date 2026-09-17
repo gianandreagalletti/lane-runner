@@ -29,6 +29,7 @@ export class PlanScene extends Phaser.Scene {
 
   init(data) {
     this.trackData      = data.trackData;
+    this.mode           = data.mode || '1p';
     this.selectedBoosts = new Set();
     this.progress       = loadProgress();
     this.planStart      = 0; // set in create() after Phaser is ready
@@ -54,7 +55,7 @@ export class PlanScene extends Phaser.Scene {
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 6) this._toggle(BOOST_ORDER[n - 1]);
       if (e.key === 'Enter') this._tryStart();
-      if (e.key === 'Escape') this.scene.start('MenuScene');
+      if (e.key === 'Escape') this.scene.start('MenuScene', { mode: this.mode });
     });
   }
 
@@ -270,6 +271,7 @@ export class PlanScene extends Phaser.Scene {
   _tryStart() {
     if (this.selectedBoosts.size !== 3) return;
     this.scene.start('RunScene', {
+      mode:           this.mode,
       trackData:      this.trackData,
       loadout:        Array.from(this.selectedBoosts),
       planningTimeMs: Date.now() - this.planStart

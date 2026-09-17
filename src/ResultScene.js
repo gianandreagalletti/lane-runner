@@ -2,30 +2,40 @@ import Phaser from 'phaser';
 import { CANVAS_W, CANVAS_H } from './track.js';
 import { BOOSTS } from './boosts.js';
 import { loadProgress, awardXP, xpToNext } from './progression.js';
+import { BINDINGS } from './controls.js';
 
 export class ResultScene extends Phaser.Scene {
   constructor() { super({ key: 'ResultScene' }); }
 
   init(data) {
-    this.result    = data.result;
-    this.distance  = data.distance;
-    this.elapsed   = data.elapsed;
+    this.mode      = data.mode || '1p';
     this.trackData = data.trackData;
-    this.loadout   = data.loadout;
+    if (this.mode === '1p') {
+      this.result   = data.result;
+      this.distance = data.distance;
+      this.elapsed  = data.elapsed;
+      this.loadout  = data.loadout;
+    } else {
+      this.players = data.players; // [{result, distance, elapsed, loadout}, ...]
+    }
   }
 
   create() {
     this.add.rectangle(CANVAS_W / 2, CANVAS_H / 2, CANVAS_W, CANVAS_H, 0x06080f);
+    if (this.mode === '2p') this._create2P();
+    else                    this._create1P();
+  }
 
+  // ─── 1-PLAYER RESULT ──────────────────────────────────────────────────────
+
+  _create1P() {
     const isWin = this.result === 'COMPLETE';
 
-    // Title
     this.add.text(CANVAS_W / 2, 90, isWin ? 'TRACK COMPLETE' : 'RUN FAILED', {
       fontSize: '54px', fontFamily: 'monospace',
       color:    isWin ? '#66EE88' : '#EE5544'
     }).setOrigin(0.5);
 
-    // Stats
     const distLine = isWin
       ? `Distance: ${this.distance} / ${this.trackData.length}`
       : `Reached: ${this.distance} / ${this.trackData.length}`;
@@ -38,7 +48,6 @@ export class ResultScene extends Phaser.Scene {
       fontSize: '20px', fontFamily: 'monospace', color: '#BBCCDD'
     }).setOrigin(0.5);
 
-    // Loadout recap
     this.add.text(CANVAS_W / 2, 242, 'Loadout:', {
       fontSize: '14px', fontFamily: 'monospace', color: '#445566'
     }).setOrigin(0.5);
@@ -51,20 +60,18 @@ export class ResultScene extends Phaser.Scene {
       }).setOrigin(0.5);
     });
 
-    // XP
-    this._drawXpSection(isWin, 360);
+    this._drawXpSection(isWin, this.distance, 360);
 
-    // Nav buttons
     this._btn(CANVAS_W / 2 - 170, 580, '[R] Retry plan', () => {
-      this.scene.start('PlanScene', { trackData: this.trackData });
+      this.scene.start('PlanScene', { trackData: this.trackData, mode: '1p' });
     });
     this._btn(CANVAS_W / 2 + 170, 580, '[M] Main menu', () => {
       this.scene.start('MenuScene');
     });
 
-    this.input.keyboard.on('keydown-R', () =>
-      this.scene.start('PlanScene', { trackData: this.trackData }));
-    this.input.keyboard.on('keydown-M', () =>
+    this.input.keyboard.on(`keydown-${BINDINGS.global.retry}`, () =>
+      this.scene.start('PlanScene', { trackData: this.trackData, mode: '1p' }));
+    this.input.keyboard.on(`keydown-${BINDINGS.global.menu}`, () =>
       this.scene.start('MenuScene'));
 
     this.add.text(CANVAS_W / 2, CANVAS_H - 22, 'R = retry plan  ·  M = main menu', {
@@ -72,23 +79,114 @@ export class ResultScene extends Phaser.Scene {
     }).setOrigin(0.5);
   }
 
-  _drawXpSection(isWin, y) {
-    const state = loadProgress();
-    const { gained, levelsGained } = awardXP(state, this.distance, isWin);
+  // ─── 2-PLAYER RESULT ──────────────────────────────────────────────────────
 
-    // Animated XP pop-up: starts at y+30, floats up to y, fades in
+  _create2P() {
+    const [p1, p2] = this.players;
+
+    // Determine winner
+    const winnerIdx = (() => {
+      if (p1.result === 'COMPLETE' && p2.result !== 'COMPLETE') return 0;
+      if (p2.result === 'COMPLETE' && p1.result !== 'COMPLETE') return 1;
+      if (p1.distance > p2.distance) return 0;
+      if (p2.distance > p1.distance) return 1;
+      return -1; // tie
+    })();
+
+    const titleText  = winnerIdx === -1 ? 'TIE!' : `PLAYER ${winnerIdx + 1} WINS`;
+    const titleColor = winnerIdx === -1 ? '#FFEE55' : '#66EE88';
+    this.add.text(CANVAS_W / 2, 68, titleText, {
+      fontSize: '44px', fontFamily: 'monospace', color: titleColor
+    }).setOrigin(0.5);
+
+    this._drawPlayerPanel(300, p1, 0, winnerIdx === 0);
+    this._drawPlayerPanel(980, p2, 1, winnerIdx === 1);
+
+    // Divider
+    const dg = this.add.graphics();
+    dg.lineStyle(1, 0x1a2a3a, 1);
+    dg.lineBetween(CANVAS_W / 2, 120, CANVAS_W / 2, 490);
+
+    // XP based on best-performing player
+    const best = winnerIdx >= 0
+      ? this.players[winnerIdx]
+      : (p1.distance >= p2.distance ? p1 : p2);
+    this._drawXpSection(best.result === 'COMPLETE', best.distance, 490);
+
+    const cx = CANVAS_W / 2;
+    this._btn(cx - 170, 626, '[R] Retry plan', () => {
+      this.scene.start('PlanScene', { trackData: this.trackData, mode: '2p' });
+    });
+    this._btn(cx + 170, 626, '[M] Main menu', () => {
+      this.scene.start('MenuScene');
+    });
+
+    this.input.keyboard.on(`keydown-${BINDINGS.global.retry}`, () =>
+      this.scene.start('PlanScene', { trackData: this.trackData, mode: '2p' }));
+    this.input.keyboard.on(`keydown-${BINDINGS.global.menu}`, () =>
+      this.scene.start('MenuScene'));
+
+    this.add.text(cx, CANVAS_H - 22, 'R = retry plan  ·  M = main menu', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#2a3a44'
+    }).setOrigin(0.5);
+  }
+
+  _drawPlayerPanel(cx, p, idx, isWinner) {
+    let y = 130;
+
+    if (isWinner) {
+      this.add.text(cx, y - 20, '★ WINNER', {
+        fontSize: '13px', fontFamily: 'monospace', color: '#FFD700'
+      }).setOrigin(0.5);
+    }
+
+    this.add.text(cx, y, `P${idx + 1}`, {
+      fontSize: '26px', fontFamily: 'monospace', color: '#AADDFF'
+    }).setOrigin(0.5); y += 38;
+
+    const resColor = p.result === 'COMPLETE' ? '#66EE88' : '#EE5544';
+    const resText  = p.result === 'COMPLETE' ? 'COMPLETE' : 'ELIMINATED';
+    this.add.text(cx, y, resText, {
+      fontSize: '20px', fontFamily: 'monospace', color: resColor
+    }).setOrigin(0.5); y += 30;
+
+    this.add.text(cx, y, `${p.distance} / ${this.trackData.length}`, {
+      fontSize: '15px', fontFamily: 'monospace', color: '#BBCCDD'
+    }).setOrigin(0.5); y += 22;
+
+    this.add.text(cx, y, `${p.elapsed}s`, {
+      fontSize: '15px', fontFamily: 'monospace', color: '#BBCCDD'
+    }).setOrigin(0.5); y += 30;
+
+    this.add.text(cx, y, 'Loadout:', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#445566'
+    }).setOrigin(0.5); y += 18;
+
+    p.loadout.forEach(id => {
+      const b = BOOSTS[id];
+      this.add.text(cx, y, `${b.name}  (${b.type})`, {
+        fontSize: '12px', fontFamily: 'monospace',
+        color: b.type === 'passive' ? '#448866' : '#886644'
+      }).setOrigin(0.5); y += 18;
+    });
+  }
+
+  // ─── SHARED HELPERS ───────────────────────────────────────────────────────
+
+  _drawXpSection(isWin, distance, y) {
+    const state = loadProgress();
+    const { gained, levelsGained } = awardXP(state, distance, isWin);
+
     const xpPop = this.add.text(CANVAS_W / 2, y + 40, `+${gained} XP`, {
       fontSize: '32px', fontFamily: 'monospace', color: '#FFE044',
       stroke: '#000000', strokeThickness: 3
     }).setOrigin(0.5).setAlpha(0);
 
     this.tweens.add({
-      targets: xpPop, y: y, alpha: 1,
-      duration: 500, ease: 'Back.easeOut',
-      delay: 200
+      targets: xpPop, y, alpha: 1,
+      duration: 500, ease: 'Back.easeOut', delay: 200
     });
 
-    // Level-up announcements
     let offsetY = y + 36;
     for (const lv of levelsGained) {
       const msg = lv.unlocked
@@ -100,7 +198,6 @@ export class ResultScene extends Phaser.Scene {
       offsetY += 28;
     }
 
-    // Progress bar (current state after XP)
     const barW = 300, barH = 8, barX = CANVAS_W / 2 - barW / 2;
     const nextThresh = 100 * (state.level + 1);
     const prevThresh = 100 * state.level;

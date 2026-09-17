@@ -1,3 +1,21 @@
+# Session 4B — 2P Shared-Camera Design
+
+## Sprint's offensive use
+
+Sprint gives +40% speed for 4 seconds. In 2P shared-camera mode, pulling far enough
+ahead of the opponent eliminates them (`GAP_ELIMINATION` constant in `src/RunScene.js`,
+currently 500 track units). Sprint can close that gap offensively — burn a charge at
+the right moment and you might leave the other player permanently behind.
+
+Whether this is exciting (sprint becomes a tactical weapon with a counterplay window)
+or degenerate (whoever uses sprint first just wins) is exactly what the playtest
+will answer. **Do not pre-emptively nerf it.**
+
+To tune during playtest: `GAP_ELIMINATION` at the top of `src/RunScene.js`.
+Raising it → more forgiving. Lowering it → sprint-rush dominant.
+
+---
+
 # Session 2B — Design Notes
 
 ## Reactive Window Tuning

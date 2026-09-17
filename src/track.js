@@ -230,3 +230,13 @@ export const TRACK_3 = {
 };
 
 export const ALL_TRACKS = [TRACK_1, TRACK_2, TRACK_3];
+
+// ─── Split-screen geometry (2-player mode) ────────────────────────────────────
+export const SPLIT_HALF_W       = 640;
+export const SPLIT_LANE_WIDTH   = 140;
+export const SPLIT_LANE_GAP     = 20;
+export const SPLIT_LANE_START_X = 90;
+// Centers are relative to each half's x origin (add pOffset to get absolute)
+export const SPLIT_LANE_CENTERS = [160, 320, 480];
+export const SPLIT_OBS_W        = 110;
+export const SPLIT_OBS_H        = 50;

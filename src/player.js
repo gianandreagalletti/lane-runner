@@ -13,8 +13,12 @@ export class Player {
   constructor(scene, opts = {}) {
     this.scene = scene;
 
+    this.laneCenters     = opts.laneCenters || LANE_CENTERS;
+    this.visualOffsetX   = opts.visualOffsetX || 0;   // cosmetic-only X offset from lane centre
+    this.baseBodyColor   = opts.bodyColor || 0xFFFFFF; // default white; P2 uses amber
+
     this.lane            = 1;
-    this.x               = LANE_CENTERS[1];
+    this.x               = this.laneCenters[1];
     this.y               = PLAYER_Y;
 
     this.isTweening      = false;
@@ -24,7 +28,7 @@ export class Player {
     this.speedMultiplier = 1;
     this.debuffTimer     = 0;
     this.debuffType      = null;
-    this.flashTimer      = 0; // counts down from FLASH_DUR, drives body-color tint
+    this.flashTimer      = 0;
 
     this.graphics = scene.add.graphics();
     this._draw();
@@ -41,7 +45,7 @@ export class Player {
 
     this.isTweening = true;
     if (this.switchDuration === 0) {
-      this.x = LANE_CENTERS[newLane];
+      this.x = this.laneCenters[newLane];
       this.lane = newLane;
       this.isTweening = false;
       if (this.pendingDir !== null) {
@@ -49,7 +53,7 @@ export class Player {
       }
     } else {
       this.scene.tweens.add({
-        targets: this, x: LANE_CENTERS[newLane],
+        targets: this, x: this.laneCenters[newLane],
         duration: this.switchDuration, ease: 'Sine.easeInOut',
         onComplete: () => {
           this.lane = newLane; this.isTweening = false;
@@ -92,30 +96,33 @@ export class Player {
     const g = this.graphics;
     g.clear();
 
+    // Logical x is the lane centre; visual x adds the cosmetic offset.
+    const drawX = this.x + this.visualOffsetX;
+    const drawY = this.y;
+
     // Persistent glow when debuffed
     if (this.debuffType === 'ice') {
       g.fillStyle(0xB8D8E8, 0.40);
-      g.fillRoundedRect(this.x - 26, this.y - 26, 52, 52, 12);
+      g.fillRoundedRect(drawX - 26, drawY - 26, 52, 52, 12);
     } else if (this.debuffType === 'water') {
       g.fillStyle(0x3AA8C4, 0.40);
-      g.fillRoundedRect(this.x - 26, this.y - 26, 52, 52, 12);
+      g.fillRoundedRect(drawX - 26, drawY - 26, 52, 52, 12);
     }
 
-    // Body — flashes to debuff color when first hit, fades back to white
-    let bodyColor = 0xFFFFFF;
+    // Body colour — flashes to debuff colour on hit, fades back to base colour
+    let bodyColor = this.baseBodyColor;
     if (this.flashTimer > 0 && this.debuffType) {
       const t = this.flashTimer / FLASH_DUR; // 1 → 0
-      // Lerp: white (FF) toward debuff color
       const flashCol = this.debuffType === 'ice' ? 0x88CCFF : 0x44CCEE;
       bodyColor = Phaser.Display.Color.Interpolate.ColorWithColor(
         Phaser.Display.Color.ValueToColor(flashCol),
-        Phaser.Display.Color.ValueToColor(0xFFFFFF),
+        Phaser.Display.Color.ValueToColor(this.baseBodyColor),
         100, Math.round((1 - t) * 100)
       );
       bodyColor = Phaser.Display.Color.GetColor(bodyColor.r, bodyColor.g, bodyColor.b);
     }
 
     g.fillStyle(bodyColor);
-    g.fillRoundedRect(this.x - PLAYER_W / 2, this.y - PLAYER_H / 2, PLAYER_W, PLAYER_H, CORNER_R);
+    g.fillRoundedRect(drawX - PLAYER_W / 2, drawY - PLAYER_H / 2, PLAYER_W, PLAYER_H, CORNER_R);
   }
 }
