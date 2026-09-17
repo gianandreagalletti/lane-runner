@@ -58,6 +58,8 @@ export class Obstacles {
   markHit(obs, playerIdx = 0)     { obs.hitByPlayer[playerIdx] = true;  obs.pendingByPlayer[playerIdx] = false; }
   markPending(obs, playerIdx = 0) { obs.pendingByPlayer[playerIdx] = true; }
   clearPending(obs, playerIdx = 0){ obs.pendingByPlayer[playerIdx] = false; obs.hitByPlayer[playerIdx] = true; }
+  // Rock Break: destroys for all players (shared destruction)
+  markHitAll(obs) { obs.hitByPlayer = [true, true]; obs.pendingByPlayer = [false, false]; }
 
   destroy() { this.graphics.destroy(); }
 
@@ -65,9 +67,12 @@ export class Obstacles {
     const g = this.graphics;
     g.clear();
     for (const obs of this.list) {
-      // In 1P: skip once player 0 has resolved it (original behaviour).
-      // In 2P: always draw — each player resolves independently.
-      if (this.numPlayers === 1 && obs.hitByPlayer[0]) continue;
+      // Hide once all active players have resolved this obstacle.
+      // In 1P: hide when player 0 has resolved it.
+      // In 2P: hide only when BOTH players have resolved it (rock_break uses markHitAll;
+      //         phase only resolves for the phasing player via clearPending).
+      const allHit = obs.hitByPlayer[0] && (this.numPlayers < 2 || obs.hitByPlayer[1]);
+      if (allHit) continue;
 
       const sy = obs.screenY;
       if (sy < -this.obsH - 2 || sy > this.scene.scale.height + this.obsH) continue;

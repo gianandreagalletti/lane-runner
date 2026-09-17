@@ -653,11 +653,14 @@ export class RunScene extends Phaser.Scene {
     const obsX = LANE_CENTERS[ps.reactiveObs.lane];
     if (slot.id === 'rock_break') {
       rockBreakEffect(this, ps.reactiveObs, obsX);
+      // Rock Break destroys for BOTH players in 2P
+      this.obstacles.markHitAll(ps.reactiveObs);
     } else {
       phaseEffect(this, ps.player, ps.reactiveObs, obsX);
+      // Phase only bypasses for the phasing player
+      this.obstacles.clearPending(ps.reactiveObs, ps.idx);
     }
 
-    this.obstacles.clearPending(ps.reactiveObs, ps.idx);
     ps.reactiveObs = null;
     this._clearReactiveP(ps);
   }

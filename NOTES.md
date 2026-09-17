@@ -1,3 +1,9 @@
+# Req 4 — Rock Break vs Phase tradeoff in 2P
+
+> "Req 4 gives Rock Break a cost in two-player mode: clearing the rock also clears it for your opponent. Whether players notice that tradeoff, and whether it makes Phase the better competitive pick, is a playtest question. Do not rebalance either boost pre-emptively."
+
+---
+
 # Session 4B — 2P Shared-Camera Design
 
 ## Sprint's offensive use
