@@ -9,7 +9,7 @@ import {
   CANVAS_W, CANVAS_H, LANE_WIDTH, LANE_GAP, LANE_START_X, LANE_COLORS,
   LANE_CENTERS, PLAYER_Y
 } from './track.js';
-import { POSITION_SCALE, TICK_RATE } from '../sim/rules.js';
+import { CENTI_SCALE, TICK_RATE } from '../sim/rules.js';
 import { buildHud1P, buildHudMP, updateHud1P, updateHudMP } from './RunSceneHud.js';
 import {
   renderReactiveOverlay1P, renderWarningArrows,
@@ -62,7 +62,7 @@ export class RunScene extends Phaser.Scene {
           slot: i,
           profileId: profileIds[i],
           inputSource: this._claims ? this._claims[i].inputSource : (i === 0 ? 'local_keyboard' : 'pad'),
-          loadout: [...this._loadouts[i]]
+          loadout: JSON.parse(JSON.stringify(this._loadouts[i]))
         }))
       };
       const rt = JSON.parse(JSON.stringify(this._matchConfig));
@@ -201,14 +201,14 @@ export class RunScene extends Phaser.Scene {
     const camScaled = state.mode !== '1p' ? state.camPositionScaled : state.players[0].trackPosition;
     if (state.mode !== '1p' && activePlayers.length > 1) {
       const minPos = Math.min(...activePlayers.map(ps => ps.trackPosition));
-      const spread = (camScaled - minPos) / POSITION_SCALE;
-      const zoom   = Math.max(0.75, 1.0 - (spread / 500) * 0.25);
+      const spread = (camScaled - minPos) / CENTI_SCALE;
+      const zoom   = Math.max(0.75, 1.0 - (spread / 750) * 0.25);
       this.cameras.main.setZoom(zoom);
     }
 
     this._obstacles.render(state.obstacles, camScaled);
     state.players.forEach((ps, i) => {
-      this._players[i].y = Math.min(PLAYER_Y + (camScaled - ps.trackPosition) / POSITION_SCALE, TRAIL_PIN_Y);
+      this._players[i].y = Math.min(PLAYER_Y + (camScaled - ps.trackPosition) / CENTI_SCALE, TRAIL_PIN_Y);
       this._players[i].render(ps);
     });
     if (state.mode === '1p') {
@@ -232,7 +232,7 @@ export class RunScene extends Phaser.Scene {
     if (!this._isReplay) saveReplay(this._matchConfig, this._intentLog, state.players[0].gs);
     if (state.mode === '1p') {
       const ps = state.players[0];
-      const dist = Math.floor(ps.trackPosition / POSITION_SCALE);
+      const dist = Math.floor(ps.trackPosition / CENTI_SCALE);
       const ticks = ps.gsEndTick >= 0 ? ps.gsEndTick : state.tick;
       const elapsed = parseFloat((ticks / TICK_RATE).toFixed(2));
       appendLog({ track: this.trackData.id, loadout: ps.loadout,
@@ -246,10 +246,10 @@ export class RunScene extends Phaser.Scene {
         trackData: this.trackData, loadout: ps.loadout, ...replayData });
     } else {
       const pData = state.players.map(ps => {
-        const dist    = Math.floor(ps.trackPosition / POSITION_SCALE);
+        const dist    = Math.floor(ps.trackPosition / CENTI_SCALE);
         const endTick = ps.gsEndTick >= 0 ? ps.gsEndTick : state.tick;
         const elapsed = parseFloat((endTick / TICK_RATE).toFixed(2));
-        return { result: ps.gs, distance: dist, elapsed, loadout: [...ps.loadout],
+        return { result: ps.gs, distance: dist, elapsed, loadout: JSON.parse(JSON.stringify(ps.loadout)),
           boostUses: { ...ps.boostUseCount }, laneTimeTicks: [...ps.laneTimeTicks],
           inputSource: this._matchConfig.players[ps.idx].inputSource };
       });
