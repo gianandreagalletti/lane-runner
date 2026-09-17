@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { OnboardScene }   from './OnboardScene.js';
 import { MenuScene }      from './MenuScene.js';
+import { JoinScene }      from './JoinScene.js';
 import { PlanScene }      from './PlanScene.js';
 import { RunScene }       from './RunScene.js';
 import { ResultScene }    from './ResultScene.js';
@@ -12,8 +13,9 @@ new Phaser.Game({
   width:           CANVAS_W,
   height:          CANVAS_H,
   backgroundColor: '#06080f',
-  scene:           [OnboardScene, MenuScene, PlanScene, RunScene, ResultScene, ControlsScene],
+  scene:           [OnboardScene, MenuScene, JoinScene, PlanScene, RunScene, ResultScene, ControlsScene],
   parent:          document.body,
+  input:           { gamepad: true },
   scale: {
     mode:       Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
