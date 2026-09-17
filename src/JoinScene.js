@@ -55,22 +55,41 @@ export class JoinScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-ENTER', () => this._tryStart());
     this.input.keyboard.on('keydown-ESC',   () => this.scene.start('MenuScene', { mode: this.mode }));
 
-    // Enable gamepad
-    this.input.gamepad.on('connected', pad => console.log('Pad connected:', pad.index));
+    // Per-pad previous button state for edge detection (justDown doesn't exist in Phaser 3.87)
+    this._padBtnPrev = new Map(); // padIndex → { a: bool, b: bool }
+
+    // Enable gamepad — log already-connected pads too
+    this.input.gamepad.on('connected', pad => {
+      console.log('Pad connected:', pad.index);
+      if (!this._padBtnPrev.has(pad.index)) this._padBtnPrev.set(pad.index, { a: false, b: false });
+    });
     this.input.gamepad.on('disconnected', pad => this._releasePad(pad.index));
+
+    // Pads already present before this scene started
+    for (const pad of (this.input.gamepad.gamepads || [])) {
+      if (pad && !this._padBtnPrev.has(pad.index)) {
+        console.log('Pad already present:', pad.index);
+        this._padBtnPrev.set(pad.index, { a: false, b: false });
+      }
+    }
 
     this._refreshCards();
   }
 
   update() {
-    // Poll gamepad A buttons for claiming
+    // Poll gamepad A/B buttons for claiming — use value > 0.5 with manual edge detection
     if (!this.input.gamepad) return;
     const pads = this.input.gamepad.gamepads;
     for (const pad of pads) {
       if (!pad) continue;
-      // A = button 0, B = button 1, Start = button 9
-      if (pad.buttons[0]?.justDown) this._claimWithPad(pad.index);
-      if (pad.buttons[1]?.justDown) this._releasePad(pad.index);
+      if (!this._padBtnPrev.has(pad.index)) this._padBtnPrev.set(pad.index, { a: false, b: false });
+      const prev = this._padBtnPrev.get(pad.index);
+      const aDown = (pad.buttons[0]?.value ?? 0) > 0.5;
+      const bDown = (pad.buttons[1]?.value ?? 0) > 0.5;
+      if (aDown && !prev.a) this._claimWithPad(pad.index);
+      if (bDown && !prev.b) this._releasePad(pad.index);
+      prev.a = aDown;
+      prev.b = bDown;
     }
   }
 
