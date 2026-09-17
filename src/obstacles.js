@@ -1,7 +1,7 @@
 import {
   LANE_CENTERS, PLAYER_Y, OBS_W, OBS_H, OBS_COLORS
 } from './track.js';
-import { POSITION_SCALE } from '../sim/rules.js';
+import { CENTI_SCALE } from '../sim/rules.js';
 
 export class Obstacles {
   constructor(scene, numPlayers = 1) {
@@ -21,7 +21,7 @@ export class Obstacles {
       const allHit = obs.hitByPlayer[0] && (this.numPlayers < 2 || obs.hitByPlayer[1]);
       if (allHit) continue;
 
-      const screenY = PLAYER_Y + (camPositionScaled - obs.distanceScaled) / POSITION_SCALE;
+      const screenY = PLAYER_Y + (camPositionScaled - obs.distanceScaled) / CENTI_SCALE;
       if (screenY < -OBS_H - 2 || screenY > this.scene.scale.height + OBS_H) continue;
 
       const cx   = LANE_CENTERS[obs.lane];
@@ -48,7 +48,7 @@ export class Obstacles {
 
   // Helper for effects: get screen Y of an obstacle given camPositionScaled
   getScreenY(obs, camPositionScaled) {
-    return PLAYER_Y + (camPositionScaled - obs.distanceScaled) / POSITION_SCALE;
+    return PLAYER_Y + (camPositionScaled - obs.distanceScaled) / CENTI_SCALE;
   }
 
   destroy() { this.graphics.destroy(); }

@@ -1,6 +1,6 @@
 // Render helpers for RunScene. Extracted to keep RunScene.js under 300 lines.
 import { CANVAS_W, CANVAS_H, LANE_CENTERS, PLAYER_Y } from './track.js';
-import { POSITION_SCALE, GAP_WARNING_SCALED } from '../sim/rules.js';
+import { CENTI_SCALE, GAP_WARNING_CU } from '../sim/rules.js';
 import { rockBreakEffect, phaseEffect } from './effects.js';
 
 export function renderReactiveOverlay1P(overlay, text, state) {
@@ -14,9 +14,10 @@ export function renderReactiveOverlay1P(overlay, text, state) {
   overlay.clear();
   overlay.fillStyle(0xFF2200, 0.15 + 0.3 * frac * (0.6 + 0.4 * Math.sin(Date.now() / 35)));
   overlay.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  const reactSlots = ps.slots.map((s, i) => ({ ...s, idx: i })).filter(s => s.isReactive && s.uses > 0);
-  const hints = reactSlots.map(s => `[${s.idx + 1}] ${s.id}`).join('  ');
-  text.setText(hints ? `REACT!\n${hints}` : 'NO BOOST');
+  // Only slot 0 (rock_break) is offered — phase does NOT work in reactive window
+  const rbSlot = ps.slots[0];
+  const canUse = rbSlot && rbSlot.id === 'rock_break' && rbSlot.uses > 0;
+  text.setText(canUse ? 'REACT!\n[1] Rock Break' : 'NO BOOST');
 }
 
 export function renderWarningArrow(arrowGfx, warningText, players, playerObjs, canvasH) {
@@ -32,8 +33,8 @@ export function renderWarningArrows(arrowGfx, warningTexts, state, playerObjs, c
   if (active.length < 2) return;
   const leader = Math.max(...active.map(ps => ps.trackPosition));
   active.forEach(ps => {
-    const gap = (leader - ps.trackPosition) / POSITION_SCALE;
-    if (gap < 300) return; // GAP_WARNING display threshold
+    const gap = (leader - ps.trackPosition) / CENTI_SCALE;
+    if (gap < 450) return; // GAP_WARNING display threshold (450 display units)
     const ax = playerObjs[ps.idx].x + playerObjs[ps.idx].visualOffsetX;
     const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 150);
     arrowGfx.fillStyle(0xFF9900, pulse);
@@ -60,7 +61,7 @@ export function updatePlayerLabels(labels, players, playerObjs) {
 export function handleSimEvents(scene, state, playerObjs) {
   const camScaled = state.mode !== '1p' ? state.camPositionScaled : state.players[0].trackPosition;
   for (const ev of state.events) {
-    const obsScreenY = PLAYER_Y + (camScaled - ev.obsDistScaled) / POSITION_SCALE;
+    const obsScreenY = PLAYER_Y + (camScaled - ev.obsDistScaled) / CENTI_SCALE;
     const obsX = LANE_CENTERS[ev.obsLane];
     if (ev.type === 'rock_break') {
       rockBreakEffect(scene, { screenY: obsScreenY }, obsX);

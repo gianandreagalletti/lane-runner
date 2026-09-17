@@ -1,33 +1,32 @@
-import { BOOSTS } from './boosts.js';
+import { BOOSTS, BOOST_CONFIG } from './boosts.js';
 import { CANVAS_W, CANVAS_H, LANE_CENTERS } from './track.js';
-import { GAP_WARNING_SCALED, POSITION_SCALE } from '../sim/rules.js';
+import { GAP_WARNING_CU, CENTI_SCALE } from '../sim/rules.js';
 import { PLAYER_COLOR_HEX } from './controls.js';
 
 const ARMED_STROKE          = 0xFFDD00;
 const UNARMED_STROKE_REACT  = 0x554422;
 
+// Fixed canonical slot order: 0=rock_break, 1=sprint, 2=phase
+const SLOT_IDS = ['rock_break', 'sprint', 'phase'];
+
 export function buildHud1P(scene, slots) {
   const spacing = 226, startX = CANVAS_W / 2 - spacing;
   const chipRefs = [];
-  slots.forEach((slot, i) => {
+  // Always render exactly 3 fixed slots
+  SLOT_IDS.forEach((id, i) => {
     const x = startX + i * spacing;
-    const boost = BOOSTS[slot.id];
-    const isP   = !slot.isActive;
-    const chip  = scene.add.rectangle(x, 22, 210, 30, isP ? 0x142a1e : 0x201610)
-      .setStrokeStyle(1, isP ? 0x338844 : 0x554422);
+    const boost = BOOSTS[id];
+    const isReactive = id === 'rock_break';
+    const chip  = scene.add.rectangle(x, 22, 210, 30, 0x201610)
+      .setStrokeStyle(1, 0x554422);
     scene.add.text(x - 78, 22, `[${i + 1}]`, { fontSize: '11px', fontFamily: 'monospace', color: '#556677' }).setOrigin(0, 0.5);
     const nameT = scene.add.text(x - 58, 22, boost.name, {
-      fontSize: '13px', fontFamily: 'monospace', color: isP ? '#AAFFCC' : '#FFCC88'
+      fontSize: '13px', fontFamily: 'monospace', color: '#FFCC88'
     }).setOrigin(0, 0.5);
-    let usesT = null;
-    if (slot.isActive) {
-      usesT = scene.add.text(x + 76, 22, _usesLabel(slot), {
-        fontSize: '13px', fontFamily: 'monospace', color: '#55FF88', stroke: '#000', strokeThickness: 2
-      }).setOrigin(1, 0.5);
-    } else {
-      scene.add.text(x + 76, 22, 'ON', { fontSize: '12px', fontFamily: 'monospace', color: '#55FF88', stroke: '#000', strokeThickness: 2 }).setOrigin(1, 0.5);
-    }
-    chipRefs.push({ chip, nameT, usesT });
+    const usesT = scene.add.text(x + 76, 22, 'EMPTY', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#553333', stroke: '#000', strokeThickness: 2
+    }).setOrigin(1, 0.5);
+    chipRefs.push({ chip, nameT, usesT, id, isReactive });
   });
   const distText  = scene.add.text(20, 14, '', { fontSize: '20px', fontFamily: 'monospace', color: '#DDDDDD', stroke: '#000', strokeThickness: 3 });
   const speedText = scene.add.text(CANVAS_W - 20, 14, '', { fontSize: '20px', fontFamily: 'monospace', color: '#FFE044', stroke: '#000', strokeThickness: 3 }).setOrigin(1, 0);
@@ -54,22 +53,17 @@ export function buildHudMP(scene, allSlots) {
 
     const chipRefs = [];
     const chipY = pidx === 2 ? 68 : 38;
-    slots.forEach((slot, i) => {
+    SLOT_IDS.forEach((id, i) => {
       const cx = chipRef0X + i * chipSpacing;
-      const boost = BOOSTS[slot.id];
-      const isPassive = !slot.isActive;
-      const chip = scene.add.rectangle(cx, chipY, chipW, chipH,
-        isPassive ? 0x142a1e : 0x201610).setStrokeStyle(1, isPassive ? 0x338844 : 0x554422);
+      const boost = BOOSTS[id];
+      const chip = scene.add.rectangle(cx, chipY, chipW, chipH, 0x201610).setStrokeStyle(1, 0x554422);
       const nameT = scene.add.text(cx, chipY, boost.name, {
-        fontSize: '10px', fontFamily: 'monospace', color: isPassive ? '#AAFFCC' : '#FFCC88'
+        fontSize: '10px', fontFamily: 'monospace', color: '#FFCC88'
       }).setOrigin(0.5, 0.5);
-      let usesT = null;
-      if (slot.isActive) {
-        usesT = scene.add.text(cx + 44, chipY, _usesLabel(slot), {
-          fontSize: '10px', fontFamily: 'monospace', color: '#55FF88', stroke: '#000', strokeThickness: 2
-        }).setOrigin(1, 0.5);
-      }
-      chipRefs.push({ chip, nameT, usesT });
+      const usesT = scene.add.text(cx + 44, chipY, 'EMPTY', {
+        fontSize: '10px', fontFamily: 'monospace', color: '#553333', stroke: '#000', strokeThickness: 2
+      }).setOrigin(1, 0.5);
+      chipRefs.push({ chip, nameT, usesT, id, isReactive: id === 'rock_break' });
     });
 
     const col   = PLAYER_COLOR_HEX[pidx] || '#FFFFFF';
@@ -101,17 +95,17 @@ export function buildHudMP(scene, allSlots) {
 
 export function updateHud1P(refs, state) {
   const ps = state.players[0];
-  refs.distText.setText(`${Math.floor(ps.trackPosition / POSITION_SCALE)} / ${Math.floor(state.trackLength / POSITION_SCALE)}`);
+  refs.distText.setText(`${Math.floor(ps.trackPosition / CENTI_SCALE)} / ${Math.floor(state.trackLength / CENTI_SCALE)}`);
   const debuff = ps.debuffType ? `SLOWED ${_speedPct(ps)}%` : '';
   refs.speedText.setText(debuff);
   refs.sprintText.setText(ps.sprintTicksLeft > 0 ? `SPRINT ${(ps.sprintTicksLeft / 60).toFixed(1)}s` : '');
   ps.slots.forEach((slot, i) => {
     const ref = refs.chipRefs[i];
-    if (!ref.usesT) return;
+    if (!ref) return;
     ref.usesT.setText(_usesLabel(slot));
     ref.usesT.setColor(slot.uses > 0 ? '#55FF88' : '#553333');
     ref.nameT.setColor(slot.uses > 0 ? '#FFCC88' : '#554444');
-    if (slot.isReactive) {
+    if (ref.isReactive) {
       const armed = ps.boostKeyHeld[i] && slot.uses > 0;
       ref.chip.setStrokeStyle(armed ? 2 : 1, armed ? ARMED_STROKE : UNARMED_STROKE_REACT, armed ? 1 : undefined);
     }
@@ -123,16 +117,16 @@ export function updateHudMP(refs, state) {
     const ps  = state.players[pidx];
     const hud = refs.huds[pidx];
     if (!hud) continue;
-    hud.distT.setText(`${Math.floor(ps.trackPosition / POSITION_SCALE)} / ${Math.floor(state.trackLength / POSITION_SCALE)}`);
+    hud.distT.setText(`${Math.floor(ps.trackPosition / CENTI_SCALE)} / ${Math.floor(state.trackLength / CENTI_SCALE)}`);
     hud.debuffT.setText(ps.debuffType ? `SLOWED ${_speedPct(ps)}%` : '');
     hud.sprintT.setText(ps.sprintTicksLeft > 0 ? `SPRINT ${(ps.sprintTicksLeft / 60).toFixed(1)}s` : '');
     ps.slots.forEach((slot, i) => {
       const ref = hud.chipRefs[i];
-      if (!ref?.usesT) return;
+      if (!ref) return;
       ref.usesT.setText(_usesLabel(slot));
       ref.usesT.setColor(slot.uses > 0 ? '#55FF88' : '#553333');
       ref.nameT.setColor(slot.uses > 0 ? '#FFCC88' : '#554444');
-      if (slot.isReactive) {
+      if (ref.isReactive) {
         const armed = ps.boostKeyHeld[i] && slot.uses > 0;
         ref.chip.setStrokeStyle(armed ? 2 : 1, armed ? ARMED_STROKE : UNARMED_STROKE_REACT, armed ? 1 : undefined);
       }
@@ -143,9 +137,10 @@ export function updateHudMP(refs, state) {
   if (active.length > 1) {
     const leader = Math.max(...active.map(ps => ps.trackPosition));
     const last   = Math.min(...active.map(ps => ps.trackPosition));
-    const gap    = (leader - last) / POSITION_SCALE;
+    const gap    = (leader - last) / CENTI_SCALE;
     refs.gapText.setText(`SPREAD  ${Math.round(gap)}`);
-    refs.gapText.setColor(gap >= 300 ? '#FF9900' : '#445566');
+    // GAP_WARNING_CU / CENTI_SCALE = 450 display units
+    refs.gapText.setColor(gap >= 450 ? '#FF9900' : '#445566');
   } else {
     refs.gapText.setText('');
   }
@@ -159,8 +154,20 @@ export function updateHud2P(refs, state) {
   return updateHudMP(refs, state);
 }
 
-function _usesLabel(slot) { return slot.uses > 0 ? `×${slot.uses}` : 'SPENT'; }
+function _usesLabel(slot) { return slot.uses > 0 ? `×${slot.uses}` : 'EMPTY'; }
 function _speedPct(ps) {
-  const s = ps.sprintTicksLeft > 0 ? 140 : ps.debuffType === 'ice' ? 50 : ps.debuffType === 'water' ? 30 : 100;
-  return Math.round(s);
+  if (ps.sprintTicksLeft > 0) return 140;
+  if (ps.debuffType === 'ice') {
+    const level = ps.passives?.ice_grip ?? 0;
+    if (level >= 2) return BOOST_CONFIG.passives.ice_grip.levels[1].factorPct;
+    if (level >= 1) return BOOST_CONFIG.passives.ice_grip.levels[0].factorPct;
+    return BOOST_CONFIG.passives.ice_grip.baseFactorPct;
+  }
+  if (ps.debuffType === 'water') {
+    const level = ps.passives?.water_shield ?? 0;
+    if (level >= 2) return BOOST_CONFIG.passives.water_shield.levels[1].factorPct;
+    if (level >= 1) return BOOST_CONFIG.passives.water_shield.levels[0].factorPct;
+    return BOOST_CONFIG.passives.water_shield.baseFactorPct;
+  }
+  return 100;
 }
