@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { Player }     from './player.js';
 import { Obstacles }  from './obstacles.js';
 import { BOOSTS }     from './boosts.js';
-import { spawnBurst } from './particles.js';
+import { spawnBurst }                    from './particles.js';
+import { rockBreakEffect, phaseEffect } from './effects.js';
 import { appendLog }  from './sessionLog.js';
 import { BINDINGS }   from './controls.js';
 import {
@@ -237,12 +238,15 @@ export class RunScene extends Phaser.Scene {
 
     slot.uses--;
     this.boostUseCount[slot.id]++;
-    // Consume press-ahead for this slot
     this.boostPressTimer[slotIdx] = 0;
     this._refreshHudSlot(slotIdx);
 
     const obsX = LANE_CENTERS[this.reactiveObs.lane];
-    spawnBurst(this, obsX, this.reactiveObs.screenY, 0xFF6633, 16);
+    if (slot.id === 'rock_break') {
+      rockBreakEffect(this, this.reactiveObs, obsX);
+    } else {
+      phaseEffect(this, this.player, this.reactiveObs, obsX);
+    }
 
     this.obstacles.clearPending(this.reactiveObs);
     this.reactiveObs = null;
@@ -647,7 +651,11 @@ export class RunScene extends Phaser.Scene {
     this._refreshHudSlotP(ps, slotIdx);
 
     const obsX = LANE_CENTERS[ps.reactiveObs.lane];
-    spawnBurst(this, obsX, ps.reactiveObs.screenY, 0xFF6633, 16);
+    if (slot.id === 'rock_break') {
+      rockBreakEffect(this, ps.reactiveObs, obsX);
+    } else {
+      phaseEffect(this, ps.player, ps.reactiveObs, obsX);
+    }
 
     this.obstacles.clearPending(ps.reactiveObs, ps.idx);
     ps.reactiveObs = null;

@@ -29,6 +29,7 @@ export class Player {
     this.debuffTimer     = 0;
     this.debuffType      = null;
     this.flashTimer      = 0;
+    this.drawAlpha       = 1.0;
 
     this.graphics = scene.add.graphics();
     this._draw();
@@ -95,6 +96,7 @@ export class Player {
   _draw() {
     const g = this.graphics;
     g.clear();
+    g.setAlpha(this.drawAlpha);
 
     // Logical x is the lane centre; visual x adds the cosmetic offset.
     const drawX = this.x + this.visualOffsetX;
