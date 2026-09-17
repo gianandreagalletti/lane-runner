@@ -43,8 +43,10 @@ function xpThreshold(level) {
  * Award XP for a run, handle level-ups, persist.
  * Returns { gained, levelsGained: [{level, unlocked}] }
  */
-export function awardXP(state, distance, completed, slot = 'p1', isWinner = false) {
-  const gained = Math.floor(distance / 10) + (completed ? 50 : 0) + (isWinner ? 25 : 0);
+export function awardXP(state, distance, completed, slot = 'p1', placementBonus = 0) {
+  // placementBonus: pass a number (e.g. 25 for 1st, 15 for 2nd, 5 for 3rd) or true (legacy: winner = +25)
+  const bonus = placementBonus === true ? 25 : (typeof placementBonus === 'number' ? placementBonus : 0);
+  const gained = Math.floor(distance / 10) + (completed ? 50 : 0) + bonus;
   state.totalXP += gained;
 
   const levelsGained = [];
