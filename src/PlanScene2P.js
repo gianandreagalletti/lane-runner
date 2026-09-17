@@ -1,239 +1,284 @@
 /**
- * Multi-player side-by-side picker panels for PlanScene.
- * Call buildTwoPlayerPickers(scene, data) from PlanScene.create() when mode !== '1p'.
+ * Multi-player shop panels for PlanScene.
+ * Exports buildShopPicker(scene, data) — called from PlanScene when mode !== '1p'.
+ *
+ * Each player drives their own panel with dedicated keys:
+ *   P1: A/D to navigate rows, W/S to inc/dec, F to confirm
+ *   P2: LEFT/RIGHT to navigate rows, UP/DOWN to inc/dec, RSHIFT to confirm
+ *   P3: NUMPAD_FOUR/SIX to navigate, NUMPAD_EIGHT/FIVE to inc/dec, NUMPAD_ZERO to confirm
  *
  * data = {
- *   onBothReady: (selectedP1Set, selectedP2Set, selectedP3Set?) => void,
- *   progressP1, progressP2, progressP3?,
- *   mode: '2p'|'3p'
+ *   n: 2|3,
+ *   progresses: [prog1, prog2, prog3?],
+ *   playerKeys: [{ left, right, inc, dec, confirm }, ...],
+ *   onReady: (pidx, loadout) => void,   // called per-player when they confirm
+ *   x0: number,   // left edge of shop area (map takes 0..x0)
+ *   y0: number,   // top y
+ *   panelW: number
  * }
- *
- * P1 uses keys 1–6 to toggle (or click).
- * P2 uses ←/→ to move cursor, then 8/9/0 to toggle.
- * P3 (3P only) uses Q/E to move cursor, then I/O/P to toggle.
- * START RUN enabled when all active players have exactly 3 selected.
  */
 
-import { BOOSTS, BOOST_ORDER, BOOST_UNLOCK_LEVEL } from './boosts.js';
+import { BOOSTS, BOOST_CONFIG } from './boosts.js';
 
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
-const PANEL_TOP = 310;
 
-// Geometry depends on number of players
-function getPanelLayout(n) {
-  if (n === 3) {
-    // 3 panels: each ~400px wide
-    return [
-      { x0: 10,  w: 400 },
-      { x0: 440, w: 400 },
-      { x0: 870, w: 400 }
-    ];
+const PASSIVE_IDS = ['ice_grip', 'water_shield', 'quick_step'];
+const ACTIVE_IDS  = ['rock_break', 'sprint', 'phase'];
+const ROW_IDS     = [...PASSIVE_IDS, ...ACTIVE_IDS];
+
+export function buildShopPicker(scene, data) {
+  const { n, progresses, playerKeys, onReady, x0, y0, panelW } = data;
+  const PASSIVE_BUDGET = BOOST_CONFIG.PASSIVE_POINTS;
+  const ACTIVE_BUDGET  = BOOST_CONFIG.ACTIVE_POINTS;
+
+  const readyFlags = new Array(n).fill(false);
+
+  for (let pidx = 0; pidx < n; pidx++) {
+    const px = x0 + pidx * panelW;
+    const cx = px + panelW / 2;
+    _buildPanel(scene, pidx, cx, px, panelW, y0,
+      PASSIVE_BUDGET, ACTIVE_BUDGET, playerKeys[pidx],
+      (loadout) => {
+        readyFlags[pidx] = true;
+        onReady(pidx, loadout);
+      }
+    );
   }
-  // 2 panels: each ~610px wide
-  return [
-    { x0: 20,  w: 610 },
-    { x0: 650, w: 610 }
-  ];
 }
 
-const CARD_W_2P = 175, CARD_H = 88, CARD_GX_2P = 14;
-const CARD_W_3P = 110, CARD_GX_3P = 8;
-const CARD_GY   = 18;
+function _buildPanel(scene, pidx, cx, px, panelW, y0,
+  PASSIVE_BUDGET, ACTIVE_BUDGET, keys, onConfirm) {
 
-function cardX(panelX0, col, cardW, cardGx) {
-  return panelX0 + 20 + col * (cardW + cardGx) + cardW / 2;
-}
-function cardY(row) {
-  return PANEL_TOP + 36 + row * (CARD_H + CARD_GY) + CARD_H / 2;
-}
-
-export function buildTwoPlayerPickers(scene, data) {
-  const { onBothReady, progressP1, progressP2, progressP3, mode } = data;
-  const is3P = mode === '3p';
-  const n = is3P ? 3 : 2;
-  const panels = getPanelLayout(n);
-  const cardW  = is3P ? CARD_W_3P : CARD_W_2P;
-  const cardGx = is3P ? CARD_GX_3P : CARD_GX_2P;
-  const progresses = [progressP1, progressP2, progressP3];
   const playerColors = ['#AABBCC', '#E8A33D', '#4FD1C5'];
-  const playerLabels = ['P1 LOADOUT', 'P2 LOADOUT', 'P3 LOADOUT'];
-  const navHints  = [
-    'Keys 1–6 or click',
-    '← → to move  ·  8/9/0 to toggle',
-    'Q/E to move  ·  I/O/P to toggle'
-  ];
+  const col = playerColors[pidx];
 
-  const selectedSets = [new Set(), new Set(), new Set()];
-  const cursors = [0, 0, 0]; // cursor index per player (P2+)
-  const cardSets = [{}, {}, {}];
+  // State
+  const passiveLevels = { ice_grip: 0, water_shield: 0, quick_step: 0 };
+  const activeCharges = { rock_break: 0, sprint: 0, phase: 0 };
+  let   cursorRow = 0;  // 0–5: passive 0–2, active 0–2
+  let   confirmed = false;
 
-  // ── Panel headers
-  for (let pidx = 0; pidx < n; pidx++) {
-    const panel = panels[pidx];
-    const cx = panel.x0 + panel.w / 2;
-    scene.add.text(cx, PANEL_TOP - 22, playerLabels[pidx], {
-      fontSize: is3P ? '13px' : '15px', fontFamily: 'monospace', color: playerColors[pidx]
-    }).setOrigin(0.5, 1);
-    scene.add.text(cx, PANEL_TOP - 6, navHints[pidx], {
-      fontSize: '11px', fontFamily: 'monospace', color: pidx === 0 ? '#334455' : '#554422'
-    }).setOrigin(0.5, 1);
-  }
-
-  // ── Build card refs for each panel
-  function buildCard(panelX0, id, idx, progress, pidx) {
-    const col = idx % 3, row = Math.floor(idx / 3);
-    const cx  = cardX(panelX0, col, cardW, cardGx);
-    const cy  = cardY(row);
-    const boost = BOOSTS[id];
-    const isPass = boost.type === 'passive';
-    const reqLevel = BOOST_UNLOCK_LEVEL[id];
-    const locked = progress.level < reqLevel;
-    const fillColor = locked ? 0x0e0e12 : (isPass ? 0x162030 : 0x1a1418);
-    const edgeColor = locked ? 0x222228 : (isPass ? 0x2a4060 : 0x3a2828);
-    const bg = scene.add.rectangle(cx, cy, cardW, CARD_H, fillColor).setStrokeStyle(2, edgeColor);
-    if (!locked) {
-      bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', () => toggleCard(id, pidx));
-    }
-    scene.add.text(cx - cardW / 2 + 6, cy - CARD_H / 2 + 7, `${idx + 1}`, {
-      fontSize: '10px', fontFamily: 'monospace', color: locked ? '#333338' : '#334455'
-    });
-    scene.add.text(cx, cy - 24, isPass ? '● p' : '◆ a', {
-      fontSize: '10px', fontFamily: 'monospace',
-      color: locked ? '#2a2a30' : (isPass ? '#3366AA' : '#885533')
-    }).setOrigin(0.5);
-    const nameColor = locked ? '#333340' : '#DDEEFF';
-    const nameT = scene.add.text(cx, cy - 6, boost.name, {
-      fontSize: is3P ? '11px' : '15px', fontFamily: 'monospace', color: nameColor
-    }).setOrigin(0.5);
-    const descText  = locked ? `Lv${reqLevel}` : (is3P ? boost.name : boost.desc);
-    const descColor = locked ? '#282832' : '#445566';
-    const descT = scene.add.text(cx, cy + 18, locked ? descText : (is3P ? '' : boost.desc), {
-      fontSize: '10px', fontFamily: 'monospace', color: descColor
-    }).setOrigin(0.5);
-    cardSets[pidx][id] = { bg, nameT, descT, fillColor, edgeColor, locked };
-  }
-
-  for (let pidx = 0; pidx < n; pidx++) {
-    BOOST_ORDER.forEach((id, idx) => buildCard(panels[pidx].x0, id, idx, progresses[pidx], pidx));
-  }
-
-  // ── Cursor graphics for P2 and P3
-  const cursorGfxList = [];
-  for (let pidx = 1; pidx < n; pidx++) {
-    const cgfx = scene.add.graphics().setDepth(5);
-    cursorGfxList.push({ gfx: cgfx, pidx });
-  }
-
-  function drawCursors() {
-    for (const { gfx, pidx } of cursorGfxList) {
-      gfx.clear();
-      const curIdx = cursors[pidx];
-      const col = curIdx % 3, row = Math.floor(curIdx / 3);
-      const cx = cardX(panels[pidx].x0, col, cardW, cardGx);
-      const cy = cardY(row);
-      gfx.lineStyle(3, pidx === 1 ? 0xFFDD00 : 0x00FFCC, 0.85);
-      gfx.strokeRect(cx - cardW / 2 - 3, cy - CARD_H / 2 - 3, cardW + 6, CARD_H + 6);
-    }
-  }
-  drawCursors();
-
-  // ── Counter and start button
-  const countY = PANEL_TOP + 2 * (CARD_H + CARD_GY) + 52;
-  const countTexts = [];
-  for (let pidx = 0; pidx < n; pidx++) {
-    const cx = panels[pidx].x0 + panels[pidx].w / 2;
-    const ct = scene.add.text(cx, countY, 'Selected: 0 / 3', {
-      fontSize: '14px', fontFamily: 'monospace', color: '#667788'
-    }).setOrigin(0.5, 0);
-    countTexts.push(ct);
-  }
-
-  const btnY  = countY + 50;
-  const btnCX = CANVAS_W / 2;
-  const startBg = scene.add.rectangle(btnCX, btnY, 280, 52, 0x0a1410)
-    .setInteractive({ useHandCursor: true })
-    .setStrokeStyle(2, 0x223322);
-  const startT  = scene.add.text(btnCX, btnY, 'START RUN', {
-    fontSize: '22px', fontFamily: 'monospace', color: '#2A5535'
-  }).setOrigin(0.5);
-  scene.add.text(btnCX, btnY + 38, 'ENTER = start  ·  ESC = back', {
-    fontSize: '11px', fontFamily: 'monospace', color: '#1e2e38'
+  // Header
+  scene.add.text(cx, y0 + 4, `P${pidx + 1} LOADOUT`, {
+    fontSize: '14px', fontFamily: 'monospace', color: col
   }).setOrigin(0.5, 0);
 
-  startBg.on('pointerover', () => { if (allReady()) startBg.setFillStyle(0x163020); });
-  startBg.on('pointerout',  () => { if (allReady()) startBg.setFillStyle(0x0e2214); });
-  startBg.on('pointerdown', () => { if (allReady()) _doStart(); });
+  const keysHint = keys
+    ? `${keys.left}/${keys.right}: row  ${keys.inc}/${keys.dec}: value  ${keys.confirm}: confirm`
+    : '';
+  scene.add.text(cx, y0 + 22, keysHint, {
+    fontSize: '9px', fontFamily: 'monospace', color: '#445566'
+  }).setOrigin(0.5, 0);
 
-  // ── Helpers
-  function allReady() {
-    for (let i = 0; i < n; i++) if (selectedSets[i].size !== 3) return false;
-    return true;
+  // Budget displays
+  const pBudgetT = scene.add.text(px + 6, y0 + 38, '', {
+    fontSize: '11px', fontFamily: 'monospace', color: '#66BBFF'
+  }).setOrigin(0, 0);
+  const aBudgetT = scene.add.text(px + 6, y0 + 52, '', {
+    fontSize: '11px', fontFamily: 'monospace', color: '#FFAA44'
+  }).setOrigin(0, 0);
+
+  // Section labels
+  scene.add.text(px + 6, y0 + 70, 'PASSIVES', {
+    fontSize: '10px', fontFamily: 'monospace', color: '#335577'
+  }).setOrigin(0, 0);
+  scene.add.text(px + 6, y0 + 196, 'ACTIVES', {
+    fontSize: '10px', fontFamily: 'monospace', color: '#664422'
+  }).setOrigin(0, 0);
+
+  // Row Y positions (6 rows: 3 passive + 3 active)
+  const rowY = [
+    y0 + 90,  y0 + 120, y0 + 150,  // passives
+    y0 + 214, y0 + 244, y0 + 274   // actives
+  ];
+
+  const rowRefs = [];
+  for (let ri = 0; ri < 6; ri++) {
+    const ry  = rowY[ri];
+    const isP = ri < 3;
+    const id  = ROW_IDS[ri];
+    const boost = BOOSTS[id];
+
+    const nameT  = scene.add.text(px + 6, ry, boost.name, {
+      fontSize: '12px', fontFamily: 'monospace', color: isP ? '#DDEEFF' : '#FFDDB0'
+    }).setOrigin(0, 0.5);
+    const valT = scene.add.text(cx, ry, '0', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF'
+    }).setOrigin(0.5, 0.5);
+    const infoT = scene.add.text(cx + panelW * 0.32, ry, '', {
+      fontSize: '9px', fontFamily: 'monospace', color: '#445566'
+    }).setOrigin(0, 0.5);
+    // Cursor indicator
+    const cursorGfx = scene.add.graphics();
+
+    rowRefs.push({ id, isP, nameT, valT, infoT, cursorGfx });
   }
 
-  function refreshCards(pidx) {
-    const selected = selectedSets[pidx];
-    const cards = cardSets[pidx];
-    for (const [id, c] of Object.entries(cards)) {
-      if (c.locked) continue;
-      if (selected.has(id)) {
-        c.bg.setFillStyle(0x1a3520); c.bg.setStrokeStyle(2, 0x44BB66);
-        c.nameT.setColor('#88FFAA'); c.descT.setColor('#557766');
+  // Status + confirm button
+  const statusT = scene.add.text(cx, y0 + 308, '', {
+    fontSize: '11px', fontFamily: 'monospace', color: '#667788'
+  }).setOrigin(0.5, 0);
+  const btnBg = scene.add.rectangle(cx, y0 + 340, panelW - 16, 36, 0x0a1410)
+    .setInteractive({ useHandCursor: true })
+    .setStrokeStyle(2, 0x223322);
+  const btnT = scene.add.text(cx, y0 + 340, 'CONFIRM', {
+    fontSize: '16px', fontFamily: 'monospace', color: '#2A5535'
+  }).setOrigin(0.5);
+  btnBg.on('pointerdown', () => { if (!confirmed) _confirm(); });
+
+  const confirmText = scene.add.text(cx, y0 + 364, '', {
+    fontSize: '10px', fontFamily: 'monospace', color: '#44AA66'
+  }).setOrigin(0.5, 0);
+
+  const refresh = () => {
+    const pSpent = _passiveSpent(passiveLevels);
+    const aSpent = _activeSpent(activeCharges);
+    const pLeft  = PASSIVE_BUDGET - pSpent;
+    const aLeft  = ACTIVE_BUDGET  - aSpent;
+
+    pBudgetT.setText(`P.pts: ${pLeft}/${PASSIVE_BUDGET}`);
+    pBudgetT.setColor(pLeft < 0 ? '#FF4444' : '#66BBFF');
+    aBudgetT.setText(`A.pts: ${aLeft}/${ACTIVE_BUDGET}`);
+    aBudgetT.setColor(aLeft < 0 ? '#FF4444' : '#FFAA44');
+
+    for (let ri = 0; ri < 6; ri++) {
+      const ref = rowRefs[ri];
+      const { id, isP } = ref;
+
+      let valStr, infoStr;
+      if (isP) {
+        const level = passiveLevels[id];
+        const cfg = BOOST_CONFIG.passives[id];
+        valStr = `L${level}`;
+        ref.valT.setColor(level > 0 ? '#AAFFCC' : '#888888');
+
+        if (level === 0) {
+          infoStr = id === 'quick_step' ? `base ${cfg.baseTicks}t` : `base ${cfg.baseFactorPct}%`;
+        } else {
+          const lcfg = cfg.levels[level - 1];
+          infoStr = id === 'quick_step'
+            ? (lcfg.ticks === 0 ? 'instant' : `${lcfg.ticks}t`)
+            : `${lcfg.factorPct}%`;
+        }
       } else {
-        c.bg.setFillStyle(c.fillColor); c.bg.setStrokeStyle(2, c.edgeColor);
-        c.nameT.setColor('#DDEEFF'); c.descT.setColor('#445566');
+        const charges = activeCharges[id];
+        valStr = `x${charges}`;
+        ref.valT.setColor(charges > 0 ? '#FFCCAA' : '#888888');
+        infoStr = charges > 0 ? `${charges} charge${charges > 1 ? 's' : ''}` : 'none';
+      }
+
+      ref.valT.setText(valStr);
+      ref.infoT.setText(infoStr);
+
+      // Draw cursor
+      ref.cursorGfx.clear();
+      if (ri === cursorRow && !confirmed) {
+        ref.cursorGfx.lineStyle(2, pidx === 0 ? 0xFFDD00 : pidx === 1 ? 0xFFAA44 : 0x44FFCC, 0.9);
+        ref.cursorGfx.strokeRect(px + 2, rowY[ri] - 10, panelW - 4, 20);
       }
     }
-    drawCursors();
-  }
 
-  function refreshStart() {
-    const labels = ['P1', 'P2', 'P3'];
-    const colors = ['#66BB88', '#FFCC44', '#44FFCC'];
-    for (let i = 0; i < n; i++) {
-      countTexts[i].setText(`${labels[i]}: ${selectedSets[i].size} / 3`);
-      countTexts[i].setColor(selectedSets[i].size === 3 ? colors[i] : '#667788');
+    const canConfirm = pLeft >= 0 && aLeft >= 0;
+    btnBg.setStrokeStyle(2, canConfirm ? 0x44AA66 : 0x332211);
+    btnT.setColor(canConfirm ? '#55EE88' : '#2A5535');
+    statusT.setText(confirmed ? 'READY!' : (canConfirm ? 'Press confirm' : 'Over budget!'));
+    statusT.setColor(confirmed ? '#44FF88' : (canConfirm ? '#445566' : '#CC4444'));
+  };
+
+  const _getValue = (ri) => {
+    const id = ROW_IDS[ri];
+    if (ri < 3) return passiveLevels[id];
+    return activeCharges[id];
+  };
+
+  const _inc = (ri) => {
+    if (confirmed) return;
+    const id = ROW_IDS[ri];
+    if (ri < 3) {
+      const cfg = BOOST_CONFIG.passives[id];
+      const level = passiveLevels[id];
+      if (level >= cfg.levels.length) return;
+      const nextCost = cfg.levels[level].cost;
+      if (PASSIVE_BUDGET - _passiveSpent(passiveLevels) < nextCost) return;
+      passiveLevels[id]++;
+    } else {
+      const cfg = BOOST_CONFIG.actives[id];
+      if (activeCharges[id] >= cfg.maxCharges) return;
+      if (ACTIVE_BUDGET - _activeSpent(activeCharges) < cfg.costPerCharge) return;
+      activeCharges[id]++;
     }
-    const ready = allReady();
-    startBg.setFillStyle(ready ? 0x0e2214 : 0x0a1410);
-    startBg.setStrokeStyle(2, ready ? 0x44AA66 : 0x223322);
-    startT.setColor(ready ? '#55EE88' : '#2A5535');
-  }
+    refresh();
+  };
 
-  function toggleCard(id, pidx) {
-    if (cardSets[pidx][id].locked) return;
-    const selected = selectedSets[pidx];
-    if (selected.has(id)) selected.delete(id);
-    else { if (selected.size >= 3) return; selected.add(id); }
-    refreshCards(pidx);
-    refreshStart();
-  }
+  const _dec = (ri) => {
+    if (confirmed) return;
+    const id = ROW_IDS[ri];
+    if (ri < 3) {
+      if (passiveLevels[id] <= 0) return;
+      passiveLevels[id]--;
+    } else {
+      if (activeCharges[id] <= 0) return;
+      activeCharges[id]--;
+    }
+    refresh();
+  };
 
-  function _doStart() {
-    onBothReady(selectedSets[0], selectedSets[1], selectedSets[2]);
-  }
+  const _confirm = () => {
+    if (confirmed) return;
+    const pLeft = PASSIVE_BUDGET - _passiveSpent(passiveLevels);
+    const aLeft = ACTIVE_BUDGET  - _activeSpent(activeCharges);
+    if (pLeft < 0 || aLeft < 0) return;
+    confirmed = true;
+    confirmText.setText('LOCKED IN');
+    btnBg.setFillStyle(0x0e2814);
+    refresh();
+    onConfirm({
+      passives: { ...passiveLevels },
+      actives:  { ...activeCharges }
+    });
+  };
 
-  // ── Keyboard input
-  scene.input.keyboard.on('keydown', e => {
-    const n2 = parseInt(e.key, 10);
-    if (n2 >= 1 && n2 <= 6) toggleCard(BOOST_ORDER[n2 - 1], 0);
-    // P2 nav
-    if (e.key === 'ArrowLeft' || e.code === 'ArrowLeft') { cursors[1] = Math.max(0, cursors[1] - 1); drawCursors(); }
-    if (e.key === 'ArrowRight' || e.code === 'ArrowRight') { cursors[1] = Math.min(5, cursors[1] + 1); drawCursors(); }
-    if (e.key === '8') toggleCard(BOOST_ORDER[cursors[1]], 1);
-    if (e.key === '9') toggleCard(BOOST_ORDER[cursors[1]], 1);
-    if (e.key === '0') toggleCard(BOOST_ORDER[cursors[1]], 1);
-    // P3 nav (3P only)
-    if (is3P) {
-      if (e.code === 'KeyQ') { cursors[2] = Math.max(0, cursors[2] - 1); drawCursors(); }
-      if (e.code === 'KeyE') { cursors[2] = Math.min(5, cursors[2] + 1); drawCursors(); }
-      if (e.code === 'KeyI' || e.code === 'KeyO' || e.code === 'KeyP') {
-        toggleCard(BOOST_ORDER[cursors[2]], 2);
+  // Keyboard input
+  if (keys) {
+    scene.input.keyboard.on('keydown', e => {
+      if (confirmed) return;
+      if (e.code === `Key${keys.left}` || e.key === keys.left || e.code === keys.left) {
+        cursorRow = Math.max(0, cursorRow - 1);
+        refresh();
+      } else if (e.code === `Key${keys.right}` || e.key === keys.right || e.code === keys.right) {
+        cursorRow = Math.min(5, cursorRow + 1);
+        refresh();
+      } else if (e.code === `Key${keys.inc}` || e.key === keys.inc || e.code === keys.inc ||
+                 e.code === keys.inc) {
+        _inc(cursorRow);
+      } else if (e.code === `Key${keys.dec}` || e.key === keys.dec || e.code === keys.dec ||
+                 e.code === keys.dec) {
+        _dec(cursorRow);
+      } else if (e.code === `Key${keys.confirm}` || e.key === keys.confirm ||
+                 e.code === keys.confirm || e.key === keys.confirm) {
+        _confirm();
       }
-    }
-    if (e.key === 'Enter') { if (allReady()) _doStart(); }
-  });
+    });
+  }
 
-  refreshStart();
+  refresh();
+}
+
+function _passiveSpent(passiveLevels) {
+  let spent = 0;
+  for (const id of PASSIVE_IDS) {
+    const level = passiveLevels[id];
+    const cfg = BOOST_CONFIG.passives[id];
+    for (let l = 0; l < level; l++) spent += cfg.levels[l].cost;
+  }
+  return spent;
+}
+
+function _activeSpent(activeCharges) {
+  let spent = 0;
+  for (const id of ACTIVE_IDS) {
+    spent += BOOST_CONFIG.actives[id].costPerCharge * (activeCharges[id] ?? 0);
+  }
+  return spent;
 }
