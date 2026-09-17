@@ -8,8 +8,10 @@ export class ResultScene extends Phaser.Scene {
   constructor() { super({ key: 'ResultScene' }); }
 
   init(data) {
-    this.mode      = data.mode || '1p';
-    this.trackData = data.trackData;
+    this.mode          = data.mode || '1p';
+    this.trackData     = data.trackData;
+    this.replayOutcome = data.replayOutcome || null;
+    this.replayMatched = data.replayMatched ?? null;
     if (this.mode === '1p') {
       this.result   = data.result;
       this.distance = data.distance;
@@ -35,6 +37,14 @@ export class ResultScene extends Phaser.Scene {
       fontSize: '54px', fontFamily: 'monospace',
       color:    isWin ? '#66EE88' : '#EE5544'
     }).setOrigin(0.5);
+
+    if (this.replayOutcome) {
+      const matched = this.replayMatched;
+      this.add.text(CANVAS_W / 2, 130, matched ? 'REPLAY ✓ deterministic' : 'REPLAY ✗ mismatch', {
+        fontSize: '13px', fontFamily: 'monospace',
+        color: matched ? '#44BB66' : '#BB4444'
+      }).setOrigin(0.5);
+    }
 
     const distLine = isWin
       ? `Distance: ${this.distance} / ${this.trackData.length}`

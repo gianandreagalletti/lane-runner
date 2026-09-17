@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { CANVAS_W, CANVAS_H, ALL_TRACKS } from './track.js';
+import { CANVAS_W, CANVAS_H, ALL_TRACKS, getTrackById } from './track.js';
 import { loadProgress, resetProgress, xpToNext } from './progression.js';
-import { exportLog, getLog } from './sessionLog.js';
+import { exportLog, getLog, loadReplay } from './sessionLog.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: 'MenuScene' }); }
@@ -93,6 +93,37 @@ export class MenuScene extends Phaser.Scene {
       this.time.delayedCall(2000, () => {
         this.exportLabel.setText(`EXPORT LOG (${n} runs)`);
         this.exportLabel.setColor('#3a7755');
+      });
+    });
+
+    const replay = loadReplay();
+    const replayBg = this.add.rectangle(CANVAS_W - 310, CANVAS_H - 34, 150, 30, 0x0a1428)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x224466);
+    this.replayLabel = this.add.text(CANVAS_W - 310, CANVAS_H - 34, 'REPLAY LAST RUN', {
+      fontSize: '11px', fontFamily: 'monospace', color: replay ? '#2255AA' : '#1a2a3a'
+    }).setOrigin(0.5);
+    replayBg.on('pointerover', () => replayBg.setFillStyle(0x0e1e38));
+    replayBg.on('pointerout',  () => replayBg.setFillStyle(0x0a1428));
+    replayBg.on('pointerdown', () => {
+      const r = loadReplay();
+      if (!r) {
+        this.replayLabel.setText('No replay saved');
+        this.time.delayedCall(1500, () => this.replayLabel.setText('REPLAY LAST RUN'));
+        return;
+      }
+      const trackData = getTrackById(r.matchConfig.trackId);
+      if (!trackData) { this.replayLabel.setText('Track not found'); return; }
+      this.scene.start('RunScene', {
+        mode: r.matchConfig.mode,
+        trackData,
+        isReplay: true,
+        replayMatchConfig: r.matchConfig,
+        replayIntents: r.intents,
+        originalOutcome: r.originalOutcome,
+        loadout: r.matchConfig.players[0]?.loadout ?? [],
+        loadoutP1: r.matchConfig.players[0]?.loadout ?? [],
+        loadoutP2: r.matchConfig.players[1]?.loadout ?? []
       });
     });
 
