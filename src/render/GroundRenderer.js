@@ -94,32 +94,35 @@ export class GroundRenderer {
     g.fillRect(0, HORIZON_Y, canvasW, canvasH - HORIZON_Y);
 
     // --- Lane segments — back to front ---
-    const numSegments = Math.ceil(PROJ.DRAW_DISTANCE / PROJ.SEGMENT_LEN) + 1;
+    // Segment boundaries live at absolute world positions (multiples of SEGMENT_LEN).
+    // zRel = zAbsolute - cameraZ is a continuous float — never quantised — so the
+    // quads travel smoothly as cameraZ advances, exactly like obstacles do.
     const edges = this._laneEdges;
+    const firstSegIdx = Math.floor((cameraZ + PROJ.NEAR_CLAMP + 10) / PROJ.SEGMENT_LEN);
+    const lastSegIdx  = Math.floor((cameraZ + PROJ.DRAW_DISTANCE)   / PROJ.SEGMENT_LEN) + 1;
 
-    for (let segIdx = 0; segIdx < numSegments; segIdx++) {
-      const zFar  = cameraZ + PROJ.DRAW_DISTANCE - segIdx * PROJ.SEGMENT_LEN;
-      const zNear = zFar - PROJ.SEGMENT_LEN;
+    // Draw back-to-front: highest absolute index (farthest) first
+    for (let segIndex = lastSegIdx; segIndex >= firstSegIdx; segIndex--) {
+      const zNearAbs = segIndex       * PROJ.SEGMENT_LEN;  // absolute world position
+      const zFarAbs  = (segIndex + 1) * PROJ.SEGMENT_LEN;
 
-      // Skip segments behind camera
-      if (zNear < cameraZ + PROJ.NEAR_CLAMP + 10) continue;
+      const zRelNear = zNearAbs - cameraZ;  // continuous — never quantised
+      const zRelFar  = zFarAbs  - cameraZ;
+
+      // Skip segments behind the near plane
+      if (zRelNear < PROJ.NEAR_CLAMP + 10) continue;
+      // Skip segments beyond draw distance
+      if (zRelFar  > PROJ.DRAW_DISTANCE)    continue;
 
       // Fog factor at mid-distance of this segment
-      const zMid    = (zFar + zNear) / 2;
-      const zRelMid = zMid - cameraZ;
+      const zRelMid = (zRelNear + zRelFar) / 2;
       const fogT    = PROJ.FOG_ENABLED
         ? Math.min(Math.pow(zRelMid / PROJ.DRAW_DISTANCE, 2), 0.82) * PROJ.PERSPECTIVE_BLEND
         : 0;
 
-      // Alternate segment flag — pure function of absolute world position (near edge).
-      // Must use zNear (the segment's position along the track), never segIdx or elapsed time.
-      // shade(zAbs) = floor(zAbs / SEGMENT_LEN) % 2 === 0 ? bright : dark
-      const altSeg = Math.floor(zNear / PROJ.SEGMENT_LEN) % 2 === 1;
-
-      // Project the four ground-plane corners once, then reuse for each lane
-      // We project far/near at each lane-edge worldX
-      const zRelFar  = zFar  - cameraZ;
-      const zRelNear = zNear - cameraZ;
+      // Shade belongs to the world segment, not the draw slot.
+      // segIndex is a world-absolute integer so this is a pure function of world position.
+      const altSeg = segIndex % 2 === 1;
 
       // Draw lanes
       for (let li = 0; li < 3; li++) {
