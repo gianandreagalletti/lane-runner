@@ -6,6 +6,25 @@ import { BINDINGS, PLAYER_COLOR_HEX } from './controls.js';
 
 const PLACEMENT_XP = [25, 15, 5]; // place 1, 2, 3
 
+// Convert loadout (new object format OR legacy array) to a flat list of boost IDs for display
+function _loadoutToDisplayList(loadout) {
+  if (!loadout) return [];
+  if (Array.isArray(loadout)) return loadout; // legacy format
+  // New format: { passives: { ice_grip: 2, ... }, actives: { rock_break: 3, ... } }
+  const ids = [];
+  const passiveOrder = ['ice_grip', 'water_shield', 'quick_step'];
+  const activeOrder  = ['rock_break', 'sprint', 'phase'];
+  for (const id of passiveOrder) {
+    const level = loadout.passives?.[id] ?? 0;
+    if (level > 0) ids.push(id);
+  }
+  for (const id of activeOrder) {
+    const charges = loadout.actives?.[id] ?? 0;
+    if (charges > 0) ids.push(id);
+  }
+  return ids;
+}
+
 export class ResultScene extends Phaser.Scene {
   constructor() { super({ key: 'ResultScene' }); }
 
@@ -67,7 +86,8 @@ export class ResultScene extends Phaser.Scene {
       fontSize: '14px', fontFamily: 'monospace', color: '#445566'
     }).setOrigin(0.5);
 
-    this.loadout.forEach((id, i) => {
+    const loadoutIds = _loadoutToDisplayList(this.loadout);
+    loadoutIds.forEach((id, i) => {
       const b = BOOSTS[id];
       this.add.text(CANVAS_W / 2, 264 + i * 22, `${b.name}  (${b.type})`, {
         fontSize: '14px', fontFamily: 'monospace',
@@ -174,7 +194,8 @@ export class ResultScene extends Phaser.Scene {
     this.add.text(cx, y, `${p.distance} / ${this.trackData.length}`, { fontSize: '15px', fontFamily: 'monospace', color: '#BBCCDD' }).setOrigin(0.5); y += 20;
     this.add.text(cx, y, `${p.elapsed}s`, { fontSize: '15px', fontFamily: 'monospace', color: '#BBCCDD' }).setOrigin(0.5); y += 26;
     this.add.text(cx, y, 'Loadout:', { fontSize: '12px', fontFamily: 'monospace', color: '#445566' }).setOrigin(0.5); y += 18;
-    p.loadout.forEach(id => {
+    const loadoutIds = _loadoutToDisplayList(p.loadout);
+    loadoutIds.forEach(id => {
       const b = BOOSTS[id];
       const uses = p.boostUses?.[id];
       const usesStr = (b.type === 'active' && uses !== undefined) ? `  ×${uses}` : '';
