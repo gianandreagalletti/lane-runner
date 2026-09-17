@@ -1,3 +1,25 @@
+# Session 4J — Three Players & Xbox Gamepads
+
+## Key decisions
+
+- P3 keyboard bindings: Q/E for lanes, I/O/P for boosts. These are fallback only; P3 is expected to use a gamepad.
+- Plan screen with gamepad: during planning, pad players use keyboard equivalents OR the physical keyboard. Pad polling is not implemented in PlanScene — out of scope for 4J. Note for future session.
+- JoinScene is skipped for 1P (goes directly to PlanScene). Used only for 2P and 3P.
+- Stick edge-trigger: crossing ±0.5 fires lane intent; must return inside deadzone before next trigger.
+- Hold-to-arm on pad: A/X/B emit boost_down on press, boost_up on release, identical to keyboard boost_down/up. Sim handles armed state normally.
+- Camera zoom: 1.0→0.75 linearly as spread goes 0→500 display units, floored at 0.75. Applied via this.cameras.main.setZoom().
+- Visual offsets: 3 players in same lane at -45, 0, +45px. Collision uses lane only.
+- rock_break in 3P destroys for ALL players (clears for all 3). Phase is still per-player.
+- Placement XP: +25 first, +15 second, +5 third. Everyone still earns distance XP.
+- Log format: placements array replaces winner string. Both old (1p with 'winner') and new records coexist — EXPORT LOG handles both.
+
+## Design notes (from requirements, do not implement)
+
+- Rock Break is now worse in 3P: clearing a rock benefits 2 opponents instead of 1. May become a trap pick.
+- All 3 lanes occupied most of the time. High congestion; blocking would matter here. Do not implement blocking.
+
+---
+
 # Session 4N — Network-Readiness Refactor
 
 ## Key decisions

@@ -4,22 +4,11 @@ import { BOOSTS, BOOST_ORDER, BOOST_UNLOCK_LEVEL } from './boosts.js';
 import { loadProgress } from './progression.js';
 import { buildTwoPlayerPickers } from './PlanScene2P.js';
 
-// ── Left panel constants (1P layout) ─────────────────────────────────────────
-const MAP_TOP_1P    = 85;
-const MAP_BOTTOM_1P = 618;
-
-// ── Compact map constants (2P layout) ────────────────────────────────────────
-const MAP_TOP_2P    = 60;
-const MAP_BOTTOM_2P = 300;
-
-const COL_W  = 138;
-const COL_GAP = 16;
-const COL_X0  = 64;
-
+const MAP_TOP_1P = 85, MAP_BOTTOM_1P = 618;
+const MAP_TOP_2P = 60, MAP_BOTTOM_2P = 300;
+const COL_W = 138, COL_GAP = 16, COL_X0 = 64;
 function colLeft(lane)   { return COL_X0 + lane * (COL_W + COL_GAP); }
 function colCenter(lane) { return colLeft(lane) + COL_W / 2; }
-
-// ── Right panel constants (1P) ─────────────────────────────────────────────
 const RP_CX   = 935;
 const CARD_W  = 182;
 const CARD_H  = 94;
@@ -96,8 +85,6 @@ export class PlanScene extends Phaser.Scene {
     });
   }
 
-  // ── Track map ─────────────────────────────────────────────────────────────
-
   _drawMap(mapTop, mapBottom) {
     const mapH = mapBottom - mapTop;
     const g    = this.add.graphics();
@@ -158,8 +145,6 @@ export class PlanScene extends Phaser.Scene {
     for (const o of this.trackData.obstacles) c[o.lane][o.type]++;
     return c;
   }
-
-  // ── Boost picker (1P only) ────────────────────────────────────────────────
 
   _drawBoostPicker() {
     this.add.text(RP_CX, 42, 'SELECT LOADOUT', {
@@ -260,8 +245,6 @@ export class PlanScene extends Phaser.Scene {
       }
     }
   }
-
-  // ── Start area (1P) ───────────────────────────────────────────────────────
 
   _drawStartArea() {
     const sy = CARD_ROW[1] + CARD_H + 28;

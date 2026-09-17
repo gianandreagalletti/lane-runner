@@ -17,9 +17,7 @@ import {
 } from './RunSceneRenderer.js';
 import { GamepadInput } from './GamepadInput.js';
 
-const MS_PER_TICK = 1000 / TICK_RATE;
-const TRAIL_PIN_Y = CANVAS_H - 40;
-const PLACEMENT_XP = [25, 15, 5]; // place 1, 2, 3
+const MS_PER_TICK = 1000 / TICK_RATE, TRAIL_PIN_Y = CANVAS_H - 40;
 
 export class RunScene extends Phaser.Scene {
   constructor() { super({ key: 'RunScene' }); }
@@ -56,7 +54,6 @@ export class RunScene extends Phaser.Scene {
   create() {
     const numPlayers = this.mode === '3p' ? 3 : this.mode === '2p' ? 2 : 1;
     const profileIds = ['p1', 'p2', 'p3'];
-
     if (!this._isReplay) {
       this._matchConfig = {
         trackId: this.trackData.id, seed: Date.now() & 0xFFFFFF,
@@ -73,7 +70,6 @@ export class RunScene extends Phaser.Scene {
     }
 
     this._state = createInitialState(this._matchConfig, this.trackData);
-
     const lg = this.add.graphics();
     for (let i = 0; i < 3; i++) {
       const x = LANE_START_X + i * (LANE_WIDTH + LANE_GAP);
@@ -107,20 +103,14 @@ export class RunScene extends Phaser.Scene {
       }).setOrigin(0.5, 1).setDepth(6));
     }
 
-    // Build pad slot assignment map from claims
     this._padSlotMap = new Map();
     if (this._claims) {
       this._claims.forEach((claim, slot) => {
         if (claim && claim.inputSource === 'pad') this._padSlotMap.set(claim.padIndex, slot);
       });
     }
-    // Create GamepadInput
-    if (this._padSlotMap.size > 0 || this.mode !== '1p') {
-      this._gamepadInput = new GamepadInput(this, this._padSlotMap);
-    } else {
-      this._gamepadInput = null;
-    }
-    // Listen for pad disconnects
+    this._gamepadInput = (this._padSlotMap.size > 0 || this.mode !== '1p')
+      ? new GamepadInput(this, this._padSlotMap) : null;
     this.input.gamepad?.on('disconnected', pad => {
       if (this._gamepadInput) {
         const intents = this._gamepadInput.onDisconnect(pad.index, this._simTick);
@@ -140,7 +130,6 @@ export class RunScene extends Phaser.Scene {
       this._keys[`p${i}_right`] = addKey(b.right);
       this._keys[`p${i}_boost`] = b.boost.map(k => addKey(k));
     }
-    // P1 arrow alt keys (1P only)
     if (this.mode === '1p') {
       this._keys.p0_leftAlt  = addKey('LEFT');
       this._keys.p0_rightAlt = addKey('RIGHT');
@@ -186,7 +175,6 @@ export class RunScene extends Phaser.Scene {
       if (!now && was) emit({ tick, playerSlot, type: 'boost_up',   slot });
       setDown(keyId, now);
     };
-
     const numP = this._matchConfig.players.length;
     for (let i = 0; i < numP; i++) {
       const lKey = this._keys[`p${i}_left`];
@@ -211,8 +199,6 @@ export class RunScene extends Phaser.Scene {
   _render(state) {
     const activePlayers = state.players.filter(ps => ps.gs === 'RUNNING' || ps.gs === 'REACTIVE');
     const camScaled = state.mode !== '1p' ? state.camPositionScaled : state.players[0].trackPosition;
-
-    // Camera zoom: 1.0 at 0 spread, 0.75 at GAP_ELIMINATION display units (500)
     if (state.mode !== '1p' && activePlayers.length > 1) {
       const minPos = Math.min(...activePlayers.map(ps => ps.trackPosition));
       const spread = (camScaled - minPos) / POSITION_SCALE;
@@ -222,11 +208,9 @@ export class RunScene extends Phaser.Scene {
 
     this._obstacles.render(state.obstacles, camScaled);
     state.players.forEach((ps, i) => {
-      const gap = camScaled - ps.trackPosition;
-      this._players[i].y = Math.min(PLAYER_Y + gap / POSITION_SCALE, TRAIL_PIN_Y);
+      this._players[i].y = Math.min(PLAYER_Y + (camScaled - ps.trackPosition) / POSITION_SCALE, TRAIL_PIN_Y);
       this._players[i].render(ps);
     });
-
     if (state.mode === '1p') {
       renderReactiveOverlay1P(this._reactiveOverlay, this._reactiveText, state);
       updateHud1P(this._hudRefs, state);
@@ -245,9 +229,7 @@ export class RunScene extends Phaser.Scene {
       : state.players.every(ps => terminal(ps.gs));
     if (!done) return;
     this._transitioning = true;
-
     if (!this._isReplay) saveReplay(this._matchConfig, this._intentLog, state.players[0].gs);
-
     if (state.mode === '1p') {
       const ps = state.players[0];
       const dist = Math.floor(ps.trackPosition / POSITION_SCALE);
@@ -293,7 +275,6 @@ export class RunScene extends Phaser.Scene {
         }
         placements[sorted[i][0]] = place;
       }
-
       appendLog({
         track: this.trackData.id, mode: this.mode,
         players: pData.map((d, i) => ({
