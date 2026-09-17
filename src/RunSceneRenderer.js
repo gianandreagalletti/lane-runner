@@ -1,7 +1,8 @@
 // Render helpers for RunScene. Extracted to keep RunScene.js under 300 lines.
-import { CANVAS_W, CANVAS_H, LANE_CENTERS, PLAYER_Y } from './track.js';
+import { CANVAS_W, CANVAS_H, LANE_CENTERS } from './track.js';
 import { CENTI_SCALE, GAP_WARNING_CU } from '../sim/rules.js';
 import { rockBreakEffect, phaseEffect } from './effects.js';
+import { PROJ, LANE_TU, project } from './render/projection.js';
 
 export function renderReactiveOverlay1P(overlay, text, state) {
   const ps = state.players[0];
@@ -35,7 +36,9 @@ export function renderWarningArrows(arrowGfx, warningTexts, state, playerObjs, c
   active.forEach(ps => {
     const gap = (leader - ps.trackPosition) / CENTI_SCALE;
     if (gap < 450) return; // GAP_WARNING display threshold (450 display units)
-    const ax = playerObjs[ps.idx].x + playerObjs[ps.idx].visualOffsetX;
+
+    // Use projected screen x from the player object (updated by player.render())
+    const ax = playerObjs[ps.idx].x;
     const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 150);
     arrowGfx.fillStyle(0xFF9900, pulse);
     const ay = canvasH - 6;
@@ -50,19 +53,34 @@ export function renderWarningArrows(arrowGfx, warningTexts, state, playerObjs, c
 export function updatePlayerLabels(labels, players, playerObjs) {
   players.forEach((ps, i) => {
     const lbl = labels[i];
-    const vx  = playerObjs[i].x + playerObjs[i].visualOffsetX;
+    const vx  = playerObjs[i].x;
     const vy  = playerObjs[i].y;
-    lbl.setPosition(vx, vy - 24);
+    // Clamp label size based on screen scale
+    const scaledSize = Math.max(8, Math.min(15, Math.round(12 * (playerObjs[i].screenScale || 1))));
+    lbl.setFontSize(`${scaledSize}px`);
+    lbl.setPosition(vx, vy - 6);
     const terminal = !['RUNNING','REACTIVE'].includes(ps.gs);
     lbl.setText(terminal ? (ps.gs === 'COMPLETE' ? `P${i+1} ✓` : `P${i+1} OUT`) : `P${i+1}`);
   });
 }
 
 export function handleSimEvents(scene, state, playerObjs) {
-  const camScaled = state.mode !== '1p' ? state.camPositionScaled : state.players[0].trackPosition;
+  // Derive cameraZ the same way _render() does
+  const positions = state.players
+    .filter(ps => ps.gs === 'RUNNING' || ps.gs === 'REACTIVE')
+    .map(ps => ps.trackPosition / CENTI_SCALE);
+  const minZ = positions.length > 0 ? Math.min(...positions) : 0;
+  const maxZ = positions.length > 0 ? Math.max(...positions) : 0;
+  const cameraZ = Math.min(
+    minZ - PROJ.CAM_BACK,
+    maxZ - PROJ.CAM_BACK - PROJ.MIN_LEAD_MARGIN
+  );
+
   for (const ev of state.events) {
-    const obsScreenY = PLAYER_Y + (camScaled - ev.obsDistScaled) / CENTI_SCALE;
-    const obsX = LANE_CENTERS[ev.obsLane];
+    const obsZRel  = ev.obsDistScaled / CENTI_SCALE - cameraZ;
+    const obsWorldX = LANE_TU[ev.obsLane];
+    const { x: obsX, y: obsScreenY } = project(obsWorldX, Math.max(obsZRel, PROJ.NEAR_CLAMP + 1));
+
     if (ev.type === 'rock_break') {
       rockBreakEffect(scene, { screenY: obsScreenY }, obsX);
     } else if (ev.type === 'phase') {
