@@ -16,11 +16,14 @@ export const PROJ = {
   FOG_ENABLED:         true,
 };
 
-// Lane centres in track units (lane 0, 1, 2)
-export const LANE_TU = [-240, 0, 240];
+// Lane geometry in track units.
+// LANE_PITCH = 240 (200 of lane + 40 of gap).  ONE definition — every consumer calls laneCenterX().
+export const LANE_PITCH    = 240;
+export const LANE_HALF_TU  = 100;  // half of 200-unit lane width
+export const LANE_TU       = [-240, 0, 240]; // laneCenterX(0..2) pre-computed
 
-// Lane half-width in track units
-export const LANE_HALF_TU = 160;
+/** Canonical lateral position of a lane's centre in track units. */
+export function laneCenterX(lane) { return (lane - 1) * LANE_PITCH; }
 
 // Derived state — updated by initProjection()
 let _cx      = 640;

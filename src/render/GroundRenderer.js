@@ -13,9 +13,10 @@ const KERB_W = 26; // track units
 
 // Compute all lane left/right edges
 function getLaneEdges() {
-  // Lane 0: -240 ± 160 → [-400, -80]
-  // Lane 1:    0 ± 160 → [-160,  160]
-  // Lane 2:  240 ± 160 → [ 80,   400]
+  // Lane 0: -240 ± 100 → [-340, -140]
+  // Lane 1:    0 ± 100 → [-100,  100]
+  // Lane 2:  240 ± 100 → [ 140,  340]
+  // 40-unit gap between adjacent lanes (LANE_PITCH - 2*LANE_HALF_TU = 240-200 = 40).
   return LANE_TU.map(c => ({ left: c - LANE_HALF_TU, right: c + LANE_HALF_TU }));
 }
 
@@ -110,8 +111,10 @@ export class GroundRenderer {
         ? Math.min(Math.pow(zRelMid / PROJ.DRAW_DISTANCE, 2), 0.82) * PROJ.PERSPECTIVE_BLEND
         : 0;
 
-      // Alternate segment flag keyed off absolute track distance
-      const altSeg = Math.floor(zFar / PROJ.SEGMENT_LEN) % 2 === 1;
+      // Alternate segment flag — pure function of absolute world position (near edge).
+      // Must use zNear (the segment's position along the track), never segIdx or elapsed time.
+      // shade(zAbs) = floor(zAbs / SEGMENT_LEN) % 2 === 0 ? bright : dark
+      const altSeg = Math.floor(zNear / PROJ.SEGMENT_LEN) % 2 === 1;
 
       // Project the four ground-plane corners once, then reuse for each lane
       // We project far/near at each lane-edge worldX
