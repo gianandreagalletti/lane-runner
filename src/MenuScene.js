@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CANVAS_W, CANVAS_H, ALL_TRACKS, getTrackById } from './track.js';
 import { loadProgress, resetProgress, xpToNext } from './progression.js';
 import { exportLog, getLog, loadReplay } from './sessionLog.js';
+import { PLAYER_COLOR_HEX } from './controls.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: 'MenuScene' }); }
@@ -46,7 +47,7 @@ export class MenuScene extends Phaser.Scene {
       this._trackBtn(CANVAS_W / 2, 338 + i * 90, track, trackDescs[i], i + 1);
     });
 
-    // Bottom bar: Reset P1 | Reset P2 | Controls | Export
+    // Bottom bar: Reset P1 | Reset P2 | Reset P3 | Controls | Export
     const resetP1Bg = this.add.rectangle(60, CANVAS_H - 34, 100, 30, 0x160808)
       .setInteractive({ useHandCursor: true })
       .setStrokeStyle(1, 0x442222);
@@ -66,6 +67,16 @@ export class MenuScene extends Phaser.Scene {
     resetP2Bg.on('pointerover', () => resetP2Bg.setFillStyle(0x250c0c));
     resetP2Bg.on('pointerout',  () => resetP2Bg.setFillStyle(0x160808));
     resetP2Bg.on('pointerdown', () => { resetProgress('p2'); this.scene.restart({ mode: this.mode }); });
+
+    const resetP3Bg = this.add.rectangle(276, CANVAS_H - 34, 100, 30, 0x160808)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x442222);
+    this.add.text(276, CANVAS_H - 34, 'RESET P3', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#664444'
+    }).setOrigin(0.5);
+    resetP3Bg.on('pointerover', () => resetP3Bg.setFillStyle(0x250c0c));
+    resetP3Bg.on('pointerout',  () => resetP3Bg.setFillStyle(0x160808));
+    resetP3Bg.on('pointerdown', () => { resetProgress('p3'); this.scene.restart({ mode: this.mode }); });
 
     const ctrlBg = this.add.rectangle(CANVAS_W / 2, CANVAS_H - 34, 160, 30, 0x0d1520)
       .setInteractive({ useHandCursor: true })
@@ -164,26 +175,21 @@ export class MenuScene extends Phaser.Scene {
 
   _drawModeToggle(y) {
     const cx = CANVAS_W / 2;
-    const is1P = this.mode === '1p';
+    const modes = ['1p', '2p', '3p'];
+    const labels = ['1 PLAYER', '2 PLAYERS', '3 PLAYERS'];
+    const xPositions = [cx - 130, cx, cx + 130];
 
-    const p1Bg = this.add.rectangle(cx - 66, y, 110, 28,
-      is1P ? 0x162840 : 0x0d1520)
-      .setInteractive({ useHandCursor: true })
-      .setStrokeStyle(1, is1P ? 0x3366AA : 0x1a2a3a);
-    this.add.text(cx - 66, y, '1 PLAYER', {
-      fontSize: '13px', fontFamily: 'monospace', color: is1P ? '#88BBEE' : '#2a3a4a'
-    }).setOrigin(0.5);
-
-    const p2Bg = this.add.rectangle(cx + 66, y, 110, 28,
-      !is1P ? 0x162840 : 0x0d1520)
-      .setInteractive({ useHandCursor: true })
-      .setStrokeStyle(1, !is1P ? 0x3366AA : 0x1a2a3a);
-    this.add.text(cx + 66, y, '2 PLAYERS', {
-      fontSize: '13px', fontFamily: 'monospace', color: !is1P ? '#88BBEE' : '#2a3a4a'
-    }).setOrigin(0.5);
-
-    p1Bg.on('pointerdown', () => { if (this.mode !== '1p') this.scene.restart({ mode: '1p' }); });
-    p2Bg.on('pointerdown', () => { if (this.mode !== '2p') this.scene.restart({ mode: '2p' }); });
+    modes.forEach((m, i) => {
+      const active = this.mode === m;
+      const bg = this.add.rectangle(xPositions[i], y, 110, 28,
+        active ? 0x162840 : 0x0d1520)
+        .setInteractive({ useHandCursor: true })
+        .setStrokeStyle(1, active ? 0x3366AA : 0x1a2a3a);
+      this.add.text(xPositions[i], y, labels[i], {
+        fontSize: '13px', fontFamily: 'monospace', color: active ? '#88BBEE' : '#2a3a4a'
+      }).setOrigin(0.5);
+      bg.on('pointerdown', () => { if (this.mode !== m) this.scene.restart({ mode: m }); });
+    });
   }
 
   _trackBtn(x, y, track, desc, hotkey) {
@@ -204,6 +210,10 @@ export class MenuScene extends Phaser.Scene {
   }
 
   _go(track) {
-    this.scene.start('PlanScene', { trackData: track, mode: this.mode });
+    if (this.mode === '1p') {
+      this.scene.start('PlanScene', { trackData: track, mode: this.mode });
+    } else {
+      this.scene.start('JoinScene', { trackData: track, mode: this.mode });
+    }
   }
 }
