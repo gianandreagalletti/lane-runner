@@ -1,3 +1,24 @@
+# Session 4N — Network-Readiness Refactor
+
+## Key decisions
+
+- POSITION_SCALE = 30: integer sub-units. 200 display/s → 100 sub/tick, sprint 140, ice 50, water 30.
+- sim/ is pure JS, zero Phaser imports, runs under Node. Proved via `node scripts/headless.js`.
+- Intent types: lane_left, lane_right, boost_down, boost_up. Only consumer is sim/step.js.
+- boostKeyHeld tracks held key state in sim state (from boost_down/boost_up intents). hold-to-arm works.
+- boostPressTimer (ticks) tracks press-ahead buffer. Set on boost_down in RUNNING state. Auto-fires on rock collision if > 0.
+- drawAlpha is in sim state (drawAlphaTicksLeft ticks down). Renderer reads it — no Phaser tweens on drawAlpha.
+- Lane switch is instant in sim collision logic (ps.lane updates immediately). laneVisualFrom/laneVisualTicksLeft used by renderer only for smooth animation.
+- quick_step: sets laneVisualTicksLeft=0 so visual is also instant.
+- Replay: intent log + MatchConfig + outcome saved to localStorage after each run. REPLAY LAST RUN button in MenuScene.
+- MatchConfig JSON round-trip assertion on every match start.
+- `node scripts/headless.js` proves sim determinism under Node.
+- 4A-FIX behaviors preserved: 24-tick press-ahead buffer, hold-to-arm via boostKeyHeld flag.
+- 2P reactive overlay skipped (per-player overlays) — HUD chip armed indicators are sufficient for 2P.
+- RunScene.js split: RunSceneHud.js (HUD build/update), RunSceneRenderer.js (render helpers). All under 300 lines.
+
+---
+
 # Req 4 — Rock Break vs Phase tradeoff in 2P
 
 > "Req 4 gives Rock Break a cost in two-player mode: clearing the rock also clears it for your opponent. Whether players notice that tradeoff, and whether it makes Phase the better competitive pick, is a playtest question. Do not rebalance either boost pre-emptively."
