@@ -6,8 +6,7 @@ import { BINDINGS, PLAYER_COLORS, PLAYER_OFFSETS } from './controls.js';
 import { createInitialState } from '../sim/state.js';
 import { step } from '../sim/step.js';
 import {
-  CANVAS_W, CANVAS_H, LANE_WIDTH, LANE_GAP, LANE_START_X, LANE_COLORS,
-  LANE_CENTERS, PLAYER_Y
+  CANVAS_W, CANVAS_H
 } from './track.js';
 import { CENTI_SCALE, TICK_RATE } from '../sim/rules.js';
 import { buildHud1P, buildHudMP, updateHud1P, updateHudMP } from './RunSceneHud.js';
@@ -16,8 +15,10 @@ import {
   updatePlayerLabels, handleSimEvents
 } from './RunSceneRenderer.js';
 import { GamepadInput } from './GamepadInput.js';
+import { GroundRenderer } from './render/GroundRenderer.js';
+import { PROJ, initProjection } from './render/projection.js';
 
-const MS_PER_TICK = 1000 / TICK_RATE, TRAIL_PIN_Y = CANVAS_H - 40;
+const MS_PER_TICK = 1000 / TICK_RATE;
 
 export class RunScene extends Phaser.Scene {
   constructor() { super({ key: 'RunScene' }); }
@@ -70,12 +71,12 @@ export class RunScene extends Phaser.Scene {
     }
 
     this._state = createInitialState(this._matchConfig, this.trackData);
-    const lg = this.add.graphics();
-    for (let i = 0; i < 3; i++) {
-      const x = LANE_START_X + i * (LANE_WIDTH + LANE_GAP);
-      lg.fillStyle(LANE_COLORS[i]); lg.fillRect(x, 0, LANE_WIDTH, CANVAS_H);
-      lg.lineStyle(1, 0xFFFFFF, 0.08); lg.strokeRect(x, 0, LANE_WIDTH, CANVAS_H);
-    }
+
+    // Initialise projection with canvas dimensions
+    initProjection(CANVAS_W, CANVAS_H);
+
+    // Ground renderer (depth 0) — replaces static lane graphics
+    this._groundRenderer = new GroundRenderer(this);
 
     this._players = this._matchConfig.players.map((pc, i) => new Player(this, {
       visualOffsetX: numPlayers > 1 ? PLAYER_OFFSETS[i] : 0,
@@ -134,6 +135,11 @@ export class RunScene extends Phaser.Scene {
       this._keys.p0_leftAlt  = addKey('LEFT');
       this._keys.p0_rightAlt = addKey('RIGHT');
     }
+
+    // Listen for resize to recompute projection
+    this.scale.on('resize', (gameSize) => {
+      initProjection(gameSize.width, gameSize.height);
+    });
   }
 
   update(_t, delta) {
@@ -197,20 +203,51 @@ export class RunScene extends Phaser.Scene {
   }
 
   _render(state) {
-    const activePlayers = state.players.filter(ps => ps.gs === 'RUNNING' || ps.gs === 'REACTIVE');
-    const camScaled = state.mode !== '1p' ? state.camPositionScaled : state.players[0].trackPosition;
-    if (state.mode !== '1p' && activePlayers.length > 1) {
-      const minPos = Math.min(...activePlayers.map(ps => ps.trackPosition));
-      const spread = (camScaled - minPos) / CENTI_SCALE;
-      const zoom   = Math.max(0.75, 1.0 - (spread / 750) * 0.25);
-      this.cameras.main.setZoom(zoom);
+    // --- Camera position ---
+    const positions = state.players
+      .filter(ps => ps.gs === 'RUNNING' || ps.gs === 'REACTIVE')
+      .map(ps => ps.trackPosition / CENTI_SCALE);
+
+    const minZ = positions.length > 0 ? Math.min(...positions) : 0;
+    const maxZ = positions.length > 0 ? Math.max(...positions) : 0;
+
+    // Camera sits CAM_BACK behind the last player, but never so close that
+    // the leader is at the near plane (MIN_LEAD_MARGIN ensures leader stays visible)
+    const cameraZ = Math.min(
+      minZ - PROJ.CAM_BACK,
+      maxZ - PROJ.CAM_BACK - PROJ.MIN_LEAD_MARGIN
+    );
+
+    // 1. Ground/sky/lanes
+    this._groundRenderer.render(cameraZ);
+
+    // 2. Build combined renderable list (obstacles + players)
+    const renderables = [];
+
+    // Obstacles
+    this._obstacles.graphics.clear();
+    const obsItems = this._obstacles.getRenderItems(state.obstacles, cameraZ);
+    renderables.push(...obsItems);
+
+    // Players
+    state.players.forEach((ps, i) => {
+      const zRel = ps.trackPosition / CENTI_SCALE - cameraZ;
+      renderables.push({ type: 'player', ps, idx: i, zRel });
+    });
+
+    // 3. Sort far-to-near (descending zRel)
+    renderables.sort((a, b) => b.zRel - a.zRel);
+
+    // 4. Draw in order
+    for (const item of renderables) {
+      if (item.type === 'obstacle') {
+        this._obstacles.drawItem(item.obs, item.zRel);
+      } else {
+        this._players[item.idx].render(item.ps, cameraZ, item.idx);
+      }
     }
 
-    this._obstacles.render(state.obstacles, camScaled);
-    state.players.forEach((ps, i) => {
-      this._players[i].y = Math.min(PLAYER_Y + (camScaled - ps.trackPosition) / CENTI_SCALE, TRAIL_PIN_Y);
-      this._players[i].render(ps);
-    });
+    // 5. HUD (stays flat / 2D)
     if (state.mode === '1p') {
       renderReactiveOverlay1P(this._reactiveOverlay, this._reactiveText, state);
       updateHud1P(this._hudRefs, state);
