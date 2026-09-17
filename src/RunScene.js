@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { Player }     from './player.js';
 import { Obstacles }  from './obstacles.js';
 import { appendLog, saveReplay } from './sessionLog.js';
-import { BINDINGS }   from './controls.js';
+import { BINDINGS, PLAYER_COLORS, PLAYER_OFFSETS } from './controls.js';
 import { createInitialState } from '../sim/state.js';
 import { step } from '../sim/step.js';
 import {
@@ -10,15 +10,16 @@ import {
   LANE_CENTERS, PLAYER_Y
 } from './track.js';
 import { POSITION_SCALE, TICK_RATE } from '../sim/rules.js';
-import { buildHud1P, buildHud2P, updateHud1P, updateHud2P } from './RunSceneHud.js';
+import { buildHud1P, buildHudMP, updateHud1P, updateHudMP } from './RunSceneHud.js';
 import {
-  renderReactiveOverlay1P, renderWarningArrow,
+  renderReactiveOverlay1P, renderWarningArrows,
   updatePlayerLabels, handleSimEvents
 } from './RunSceneRenderer.js';
+import { GamepadInput } from './GamepadInput.js';
 
 const MS_PER_TICK = 1000 / TICK_RATE;
 const TRAIL_PIN_Y = CANVAS_H - 40;
-const P2_COLOR    = 0xE8A33D;
+const PLACEMENT_XP = [25, 15, 5]; // place 1, 2, 3
 
 export class RunScene extends Phaser.Scene {
   constructor() { super({ key: 'RunScene' }); }
@@ -30,12 +31,15 @@ export class RunScene extends Phaser.Scene {
     this._isReplay      = data.isReplay || false;
     this._replayIntents = data.replayIntents || [];
     this._replayOriginalOutcome = data.originalOutcome || null;
+    this._claims        = data.claims || null;
 
-    if (this.mode === '2p') {
-      this.loadoutP1 = data.loadoutP1 ?? data.loadout ?? [];
-      this.loadoutP2 = data.loadoutP2 ?? data.loadout ?? [];
+    // Generalize loadouts
+    if (this.mode === '1p') {
+      this._loadouts = [data.loadout ?? []];
+    } else if (this.mode === '2p') {
+      this._loadouts = [data.loadoutP1 ?? data.loadout ?? [], data.loadoutP2 ?? data.loadout ?? []];
     } else {
-      this.loadout = data.loadout ?? [];
+      this._loadouts = [data.loadoutP1 ?? [], data.loadoutP2 ?? [], data.loadoutP3 ?? []];
     }
 
     if (this._isReplay) this._matchConfig = data.replayMatchConfig;
@@ -50,16 +54,19 @@ export class RunScene extends Phaser.Scene {
   }
 
   create() {
+    const numPlayers = this.mode === '3p' ? 3 : this.mode === '2p' ? 2 : 1;
+    const profileIds = ['p1', 'p2', 'p3'];
+
     if (!this._isReplay) {
-      const seed = Date.now() & 0xFFFFFF;
       this._matchConfig = {
-        trackId: this.trackData.id, seed, mode: this.mode, rules: {},
-        players: this.mode === '2p'
-          ? [
-              { slot: 0, profileId: 'p1', inputSource: 'local_keyboard', loadout: [...this.loadoutP1] },
-              { slot: 1, profileId: 'p2', inputSource: 'local_keyboard', loadout: [...this.loadoutP2] }
-            ]
-          : [{ slot: 0, profileId: 'p1', inputSource: 'local_keyboard', loadout: [...this.loadout] }]
+        trackId: this.trackData.id, seed: Date.now() & 0xFFFFFF,
+        mode: this.mode, rules: {},
+        players: Array.from({ length: numPlayers }, (_, i) => ({
+          slot: i,
+          profileId: profileIds[i],
+          inputSource: this._claims ? this._claims[i].inputSource : (i === 0 ? 'local_keyboard' : 'pad'),
+          loadout: [...this._loadouts[i]]
+        }))
       };
       const rt = JSON.parse(JSON.stringify(this._matchConfig));
       if (JSON.stringify(rt) !== JSON.stringify(this._matchConfig)) console.error('MatchConfig round-trip FAILED');
@@ -74,44 +81,69 @@ export class RunScene extends Phaser.Scene {
       lg.lineStyle(1, 0xFFFFFF, 0.08); lg.strokeRect(x, 0, LANE_WIDTH, CANVAS_H);
     }
 
-    this._players = this._matchConfig.players.map(pc => new Player(this, {
-      visualOffsetX: this.mode === '2p' ? (pc.slot === 1 ? 30 : -30) : 0,
-      bodyColor:     pc.slot === 1 ? P2_COLOR : 0xFFFFFF
+    this._players = this._matchConfig.players.map((pc, i) => new Player(this, {
+      visualOffsetX: numPlayers > 1 ? PLAYER_OFFSETS[i] : 0,
+      bodyColor:     PLAYER_COLORS[i]
     }));
-    this._obstacles = new Obstacles(this, this.mode === '2p' ? 2 : 1);
+    this._obstacles = new Obstacles(this, numPlayers);
 
-    if (this.mode === '2p') {
-      this._hudRefs = buildHud2P(this, this._state.players[0].slots, this._state.players[1].slots);
-      this._warningArrow = this.add.graphics().setDepth(15);
-      this._warningText  = this.add.text(0, 0, '', { fontSize: '13px', fontFamily: 'monospace', color: '#FF9900', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 1).setDepth(15);
-      this._playerLabels = this._matchConfig.players.map(pc => this.add.text(0, 0, `P${pc.slot + 1}`, {
-        fontSize: '12px', fontFamily: 'monospace', color: pc.slot === 1 ? '#E8A33D' : '#FFFFFF',
-        stroke: '#000', strokeThickness: 3
-      }).setOrigin(0.5, 1).setDepth(6));
-    } else {
+    if (this.mode === '1p') {
       this._hudRefs = buildHud1P(this, this._state.players[0].slots);
       this._reactiveOverlay = this.add.graphics();
       this._reactiveText = this.add.text(CANVAS_W / 2, CANVAS_H / 2 - 70, '', {
         fontSize: '36px', fontFamily: 'monospace', color: '#FFFF00',
         align: 'center', stroke: '#000', strokeThickness: 4
       }).setOrigin(0.5).setDepth(10);
+    } else {
+      const allSlots = this._state.players.map(ps => ps.slots);
+      this._hudRefs = buildHudMP(this, allSlots);
+      this._warningArrow = this.add.graphics().setDepth(15);
+      this._warningTexts = this._state.players.map(() => this.add.text(0, 0, '', {
+        fontSize: '13px', fontFamily: 'monospace', color: '#FF9900', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5, 1).setDepth(15));
+      this._playerLabels = this._matchConfig.players.map((pc, i) => this.add.text(0, 0, `P${i + 1}`, {
+        fontSize: '12px', fontFamily: 'monospace', color: ['#FFFFFF', '#E8A33D', '#4FD1C5'][i] || '#FFFFFF',
+        stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5, 1).setDepth(6));
     }
 
+    // Build pad slot assignment map from claims
+    this._padSlotMap = new Map();
+    if (this._claims) {
+      this._claims.forEach((claim, slot) => {
+        if (claim && claim.inputSource === 'pad') this._padSlotMap.set(claim.padIndex, slot);
+      });
+    }
+    // Create GamepadInput
+    if (this._padSlotMap.size > 0 || this.mode !== '1p') {
+      this._gamepadInput = new GamepadInput(this, this._padSlotMap);
+    } else {
+      this._gamepadInput = null;
+    }
+    // Listen for pad disconnects
+    this.input.gamepad?.on('disconnected', pad => {
+      if (this._gamepadInput) {
+        const intents = this._gamepadInput.onDisconnect(pad.index, this._simTick);
+        this._intentQueue.push(...intents);
+      }
+    });
+
+    // Keyboard setup — generalize for all slots
     const KC = Phaser.Input.Keyboard.KeyCodes;
     const addKey = code => this.input.keyboard.addKey(KC[code]);
-    this._keys = {
-      p1Left:  addKey(BINDINGS.p1.left),
-      p1Right: addKey(BINDINGS.p1.right),
-      p1Boost: BINDINGS.p1.boost.map(k => addKey(k))
-    };
-    if (this.mode === '2p') {
-      this._keys.p2Left  = addKey(BINDINGS.p2.left);
-      this._keys.p2Right = addKey(BINDINGS.p2.right);
-      this._keys.p2Boost = BINDINGS.p2.boost.map(k => addKey(k));
+    const allBindings = [BINDINGS.p1, BINDINGS.p2, BINDINGS.p3];
+    this._keys = {};
+    const numKbPlayers = Math.min(numPlayers, allBindings.length);
+    for (let i = 0; i < numKbPlayers; i++) {
+      const b = allBindings[i];
+      this._keys[`p${i}_left`]  = addKey(b.left);
+      this._keys[`p${i}_right`] = addKey(b.right);
+      this._keys[`p${i}_boost`] = b.boost.map(k => addKey(k));
     }
+    // P1 arrow alt keys (1P only)
     if (this.mode === '1p') {
-      this._keys.p1LeftAlt  = addKey('LEFT');
-      this._keys.p1RightAlt = addKey('RIGHT');
+      this._keys.p0_leftAlt  = addKey('LEFT');
+      this._keys.p0_rightAlt = addKey('RIGHT');
     }
   }
 
@@ -154,34 +186,53 @@ export class RunScene extends Phaser.Scene {
       if (!now && was) emit({ tick, playerSlot, type: 'boost_up',   slot });
       setDown(keyId, now);
     };
-    checkLane(this._keys.p1Left,  'p1_left',  0, 'lane_left');
-    checkLane(this._keys.p1Right, 'p1_right', 0, 'lane_right');
-    if (this.mode === '1p') {
-      checkLane(this._keys.p1LeftAlt,  'p1_left_alt',  0, 'lane_left');
-      checkLane(this._keys.p1RightAlt, 'p1_right_alt', 0, 'lane_right');
+
+    const numP = this._matchConfig.players.length;
+    for (let i = 0; i < numP; i++) {
+      const lKey = this._keys[`p${i}_left`];
+      const rKey = this._keys[`p${i}_right`];
+      if (lKey) checkLane(lKey, `p${i}_l`, i, 'lane_left');
+      if (rKey) checkLane(rKey, `p${i}_r`, i, 'lane_right');
+      if (i === 0 && this.mode === '1p') {
+        checkLane(this._keys.p0_leftAlt,  'p0_la', 0, 'lane_left');
+        checkLane(this._keys.p0_rightAlt, 'p0_ra', 0, 'lane_right');
+      }
+      const boostKeys = this._keys[`p${i}_boost`] || [];
+      boostKeys.forEach((k, j) => checkBoost(k, `p${i}_b${j}`, i, j));
     }
-    this._keys.p1Boost?.forEach((k, i) => checkBoost(k, `p1_b${i}`, 0, i));
-    if (this.mode === '2p') {
-      checkLane(this._keys.p2Left,  'p2_left',  1, 'lane_left');
-      checkLane(this._keys.p2Right, 'p2_right', 1, 'lane_right');
-      this._keys.p2Boost?.forEach((k, i) => checkBoost(k, `p2_b${i}`, 1, i));
+
+    // Gamepad intents
+    if (this._gamepadInput) {
+      const padIntents = this._gamepadInput.poll(tick);
+      this._intentQueue.push(...padIntents);
     }
   }
 
   _render(state) {
-    const camScaled = state.mode === '2p' ? state.camPositionScaled : state.players[0].trackPosition;
+    const activePlayers = state.players.filter(ps => ps.gs === 'RUNNING' || ps.gs === 'REACTIVE');
+    const camScaled = state.mode !== '1p' ? state.camPositionScaled : state.players[0].trackPosition;
+
+    // Camera zoom: 1.0 at 0 spread, 0.75 at GAP_ELIMINATION display units (500)
+    if (state.mode !== '1p' && activePlayers.length > 1) {
+      const minPos = Math.min(...activePlayers.map(ps => ps.trackPosition));
+      const spread = (camScaled - minPos) / POSITION_SCALE;
+      const zoom   = Math.max(0.75, 1.0 - (spread / 500) * 0.25);
+      this.cameras.main.setZoom(zoom);
+    }
+
     this._obstacles.render(state.obstacles, camScaled);
     state.players.forEach((ps, i) => {
       const gap = camScaled - ps.trackPosition;
       this._players[i].y = Math.min(PLAYER_Y + gap / POSITION_SCALE, TRAIL_PIN_Y);
       this._players[i].render(ps);
     });
+
     if (state.mode === '1p') {
       renderReactiveOverlay1P(this._reactiveOverlay, this._reactiveText, state);
       updateHud1P(this._hudRefs, state);
     } else {
-      updateHud2P(this._hudRefs, state);
-      renderWarningArrow(this._warningArrow, this._warningText, state.players, this._players, CANVAS_H);
+      updateHudMP(this._hudRefs, state);
+      renderWarningArrows(this._warningArrow, this._warningTexts, state, this._players, CANVAS_H);
       updatePlayerLabels(this._playerLabels, state.players, this._players);
     }
   }
@@ -216,38 +267,50 @@ export class RunScene extends Phaser.Scene {
         const dist    = Math.floor(ps.trackPosition / POSITION_SCALE);
         const endTick = ps.gsEndTick >= 0 ? ps.gsEndTick : state.tick;
         const elapsed = parseFloat((endTick / TICK_RATE).toFixed(2));
-        return { result: ps.gs, distance: dist, elapsed,
-          loadout: [...ps.loadout], boostUses: { ...ps.boostUseCount },
-          laneTimeTicks: [...ps.laneTimeTicks] };
+        return { result: ps.gs, distance: dist, elapsed, loadout: [...ps.loadout],
+          boostUses: { ...ps.boostUseCount }, laneTimeTicks: [...ps.laneTimeTicks],
+          inputSource: this._matchConfig.players[ps.idx].inputSource };
       });
 
-      // Determine winner for log + XP bonus
-      const [d0, d1] = [pData[0], pData[1]];
-      const winner = (() => {
-        const c0 = d0.result === 'COMPLETE', c1 = d1.result === 'COMPLETE';
-        if (c0 && c1) { if (d0.elapsed < d1.elapsed) return 'p1'; if (d1.elapsed < d0.elapsed) return 'p2'; return 'draw'; }
-        if (c0) return 'p1'; if (c1) return 'p2';
-        if (d0.distance > d1.distance) return 'p1'; if (d1.distance > d0.distance) return 'p2';
-        return 'draw';
-      })();
+      // Compute placements
+      const sorted = [...pData.entries()].sort(([, a], [, b]) => {
+        const ac = a.result === 'COMPLETE', bc = b.result === 'COMPLETE';
+        if (ac && !bc) return -1; if (!ac && bc) return 1;
+        if (ac && bc) return a.elapsed - b.elapsed;
+        return b.distance - a.distance;
+      });
+      const placements = new Array(pData.length);
+      let place = 1;
+      for (let i = 0; i < sorted.length; i++) {
+        if (i > 0) {
+          const [, prev] = sorted[i - 1], [, cur] = sorted[i];
+          const tie = prev.result === 'COMPLETE' && cur.result === 'COMPLETE'
+            ? prev.elapsed === cur.elapsed
+            : prev.result !== 'COMPLETE' && cur.result !== 'COMPLETE'
+              ? prev.distance === cur.distance
+              : false;
+          if (!tie) place = i + 1;
+        }
+        placements[sorted[i][0]] = place;
+      }
 
       appendLog({
-        track: this.trackData.id, mode: '2p',
-        players: [
-          { slot: 'p1', loadout: d0.loadout, outcome: d0.result === 'COMPLETE' ? 'complete' : 'failed',
-            distance: d0.distance, elapsedMs: Math.round(d0.elapsed * 1000),
-            boostUses: d0.boostUses, laneTimeTicks: d0.laneTimeTicks },
-          { slot: 'p2', loadout: d1.loadout, outcome: d1.result === 'COMPLETE' ? 'complete' : 'failed',
-            distance: d1.distance, elapsedMs: Math.round(d1.elapsed * 1000),
-            boostUses: d1.boostUses, laneTimeTicks: d1.laneTimeTicks }
-        ],
-        winner, planningTimeMs: this.planningTimeMs
+        track: this.trackData.id, mode: this.mode,
+        players: pData.map((d, i) => ({
+          slot: `p${i+1}`, loadout: d.loadout,
+          outcome: d.result === 'COMPLETE' ? 'complete' : 'failed',
+          distance: d.distance, elapsedMs: Math.round(d.elapsed * 1000),
+          boostUses: d.boostUses, laneTimeTicks: d.laneTimeTicks,
+          inputSource: d.inputSource
+        })),
+        placements: placements.map((p, i) => ({ slot: `p${i+1}`, place: p })),
+        planningTimeMs: this.planningTimeMs
       });
 
       this.time.delayedCall(1500, () => {
         this.scene.start('ResultScene', {
-          mode: '2p', trackData: this.trackData, players: pData,
-          winner, planningTimeMs: this.planningTimeMs
+          mode: this.mode, trackData: this.trackData, players: pData,
+          placements, planningTimeMs: this.planningTimeMs, claims: this._claims
         });
       });
     }

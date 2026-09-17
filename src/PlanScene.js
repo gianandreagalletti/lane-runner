@@ -34,6 +34,7 @@ export class PlanScene extends Phaser.Scene {
   init(data) {
     this.trackData      = data.trackData;
     this.mode           = data.mode || '1p';
+    this._claims        = data.claims || null;
     this.selectedBoosts = new Set();
     this.progress       = loadProgress('p1');
     this.planStart      = 0;
@@ -47,9 +48,9 @@ export class PlanScene extends Phaser.Scene {
       fontSize: '20px', fontFamily: 'monospace', color: '#7899AA'
     }).setOrigin(0.5, 0);
 
-    if (this.mode === '2p') {
+    if (this.mode !== '1p') {
       this._drawMap(MAP_TOP_2P, MAP_BOTTOM_2P);
-      this._buildTwoPlayerUI();
+      this._buildMultiPlayerUI();
     } else {
       const div = this.add.graphics();
       div.lineStyle(1, 0x223344, 1);
@@ -66,21 +67,27 @@ export class PlanScene extends Phaser.Scene {
     }
   }
 
-  _buildTwoPlayerUI() {
+  _buildMultiPlayerUI() {
     const progressP1 = loadProgress('p1');
     const progressP2 = loadProgress('p2');
+    const progressP3 = this.mode === '3p' ? loadProgress('p3') : null;
 
     buildTwoPlayerPickers(this, {
       progressP1,
       progressP2,
-      onBothReady: (selectedP1, selectedP2) => {
-        this.scene.start('RunScene', {
-          mode:        '2p',
-          trackData:   this.trackData,
-          loadoutP1:   Array.from(selectedP1),
-          loadoutP2:   Array.from(selectedP2),
-          planningTimeMs: Date.now() - this.planStart
-        });
+      progressP3,
+      mode: this.mode,
+      onBothReady: (selectedP1, selectedP2, selectedP3) => {
+        const data = {
+          mode:          this.mode,
+          trackData:     this.trackData,
+          loadoutP1:     Array.from(selectedP1),
+          loadoutP2:     Array.from(selectedP2),
+          planningTimeMs: Date.now() - this.planStart,
+          claims:        this._claims
+        };
+        if (this.mode === '3p') data.loadoutP3 = Array.from(selectedP3);
+        this.scene.start('RunScene', data);
       }
     });
 

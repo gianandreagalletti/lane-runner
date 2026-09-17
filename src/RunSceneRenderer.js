@@ -20,20 +20,30 @@ export function renderReactiveOverlay1P(overlay, text, state) {
 }
 
 export function renderWarningArrow(arrowGfx, warningText, players, playerObjs, canvasH) {
-  const [a, b] = players;
-  arrowGfx.clear(); warningText.setText('');
-  const bothActive = (a.gs === 'RUNNING' || a.gs === 'REACTIVE') && (b.gs === 'RUNNING' || b.gs === 'REACTIVE');
-  if (!bothActive) return;
-  const gap = Math.abs(a.trackPosition - b.trackPosition);
-  if (gap < GAP_WARNING_SCALED) return;
-  const trailer = a.trackPosition < b.trackPosition ? a : b;
-  const ax = playerObjs[trailer.idx].x + playerObjs[trailer.idx].visualOffsetX;
-  const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 150);
-  arrowGfx.fillStyle(0xFF9900, pulse);
-  const ay = canvasH - 6;
-  arrowGfx.fillTriangle(ax, ay, ax - 11, ay - 18, ax + 11, ay - 18);
-  warningText.setPosition(ax, ay - 20);
-  warningText.setText(`-${Math.round(gap / POSITION_SCALE)}`);
+  // Legacy 2P singular version — kept for any external callers
+  const texts = Array.isArray(warningText) ? warningText : [warningText, warningText];
+  renderWarningArrows(arrowGfx, texts, { players, mode: '2p' }, playerObjs, canvasH);
+}
+
+export function renderWarningArrows(arrowGfx, warningTexts, state, playerObjs, canvasH) {
+  arrowGfx.clear();
+  warningTexts.forEach(t => t.setText(''));
+  const active = state.players.filter(ps => ps.gs === 'RUNNING' || ps.gs === 'REACTIVE');
+  if (active.length < 2) return;
+  const leader = Math.max(...active.map(ps => ps.trackPosition));
+  active.forEach(ps => {
+    const gap = (leader - ps.trackPosition) / POSITION_SCALE;
+    if (gap < 300) return; // GAP_WARNING display threshold
+    const ax = playerObjs[ps.idx].x + playerObjs[ps.idx].visualOffsetX;
+    const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 150);
+    arrowGfx.fillStyle(0xFF9900, pulse);
+    const ay = canvasH - 6;
+    arrowGfx.fillTriangle(ax, ay, ax - 11, ay - 18, ax + 11, ay - 18);
+    if (warningTexts[ps.idx]) {
+      warningTexts[ps.idx].setPosition(ax, ay - 20);
+      warningTexts[ps.idx].setText(`-${Math.round(gap)}`);
+    }
+  });
 }
 
 export function updatePlayerLabels(labels, players, playerObjs) {
@@ -48,7 +58,7 @@ export function updatePlayerLabels(labels, players, playerObjs) {
 }
 
 export function handleSimEvents(scene, state, playerObjs) {
-  const camScaled = state.mode === '2p' ? state.camPositionScaled : state.players[0].trackPosition;
+  const camScaled = state.mode !== '1p' ? state.camPositionScaled : state.players[0].trackPosition;
   for (const ev of state.events) {
     const obsScreenY = PLAYER_Y + (camScaled - ev.obsDistScaled) / POSITION_SCALE;
     const obsX = LANE_CENTERS[ev.obsLane];
