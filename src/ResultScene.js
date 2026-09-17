@@ -18,7 +18,9 @@ export class ResultScene extends Phaser.Scene {
       this.elapsed  = data.elapsed;
       this.loadout  = data.loadout;
     } else {
-      this.players = data.players; // [{result, distance, elapsed, loadout}, ...]
+      this.players        = data.players; // [{result, distance, elapsed, loadout, boostUses}, ...]
+      this.winner         = data.winner;  // 'p1'|'p2'|'draw'
+      this.planningTimeMs = data.planningTimeMs ?? 0;
     }
   }
 
@@ -83,8 +85,9 @@ export class ResultScene extends Phaser.Scene {
       this.scene.start('PlanScene', { trackData: this.trackData, mode: '1p' }));
     this.input.keyboard.on(`keydown-${BINDINGS.global.menu}`, () =>
       this.scene.start('MenuScene'));
+    this.input.keyboard.on('keydown-ESC', () => this.scene.start('MenuScene'));
 
-    this.add.text(CANVAS_W / 2, CANVAS_H - 22, 'R = retry plan  ·  M = main menu', {
+    this.add.text(CANVAS_W / 2, CANVAS_H - 22, 'R = retry plan  ·  M / ESC = main menu', {
       fontSize: '13px', fontFamily: 'monospace', color: '#2a3a44'
     }).setOrigin(0.5);
   }
@@ -94,13 +97,23 @@ export class ResultScene extends Phaser.Scene {
   _create2P() {
     const [p1, p2] = this.players;
 
-    // Determine winner
+    // Win conditions (in priority order):
+    // 1. Both complete → lower elapsed wins
+    // 2. One complete, one not → completer wins
+    // 3. Both failed/eliminated → greater distance wins
+    // 4. Exact tie in distance → draw
     const winnerIdx = (() => {
-      if (p1.result === 'COMPLETE' && p2.result !== 'COMPLETE') return 0;
-      if (p2.result === 'COMPLETE' && p1.result !== 'COMPLETE') return 1;
+      const c1 = p1.result === 'COMPLETE', c2 = p2.result === 'COMPLETE';
+      if (c1 && c2) {
+        if (p1.elapsed < p2.elapsed) return 0;
+        if (p2.elapsed < p1.elapsed) return 1;
+        return -1;
+      }
+      if (c1) return 0;
+      if (c2) return 1;
       if (p1.distance > p2.distance) return 0;
       if (p2.distance > p1.distance) return 1;
-      return -1; // tie
+      return -1;
     })();
 
     const titleText  = winnerIdx === -1 ? 'TIE!' : `PLAYER ${winnerIdx + 1} WINS`;
@@ -112,14 +125,12 @@ export class ResultScene extends Phaser.Scene {
     this._drawPlayerPanel(300, p1, 0, winnerIdx === 0);
     this._drawPlayerPanel(980, p2, 1, winnerIdx === 1);
 
-    // Divider
     const dg = this.add.graphics();
     dg.lineStyle(1, 0x1a2a3a, 1);
     dg.lineBetween(CANVAS_W / 2, 120, CANVAS_W / 2, 490);
 
-    // Award XP per player separately (drawn compact, side by side)
-    this._drawXpSection2P(p1.result === 'COMPLETE', p1.distance, 'p1', 300);
-    this._drawXpSection2P(p2.result === 'COMPLETE', p2.distance, 'p2', 980);
+    this._drawXpSection2P(p1.result === 'COMPLETE', p1.distance, 'p1', 300, winnerIdx === 0);
+    this._drawXpSection2P(p2.result === 'COMPLETE', p2.distance, 'p2', 980, winnerIdx === 1);
 
     const cx = CANVAS_W / 2;
     this._btn(cx - 170, 626, '[R] Retry plan', () => {
@@ -133,8 +144,9 @@ export class ResultScene extends Phaser.Scene {
       this.scene.start('PlanScene', { trackData: this.trackData, mode: '2p' }));
     this.input.keyboard.on(`keydown-${BINDINGS.global.menu}`, () =>
       this.scene.start('MenuScene'));
+    this.input.keyboard.on('keydown-ESC', () => this.scene.start('MenuScene'));
 
-    this.add.text(cx, CANVAS_H - 22, 'R = retry plan  ·  M = main menu', {
+    this.add.text(cx, CANVAS_H - 22, 'R = retry plan  ·  M / ESC = main menu', {
       fontSize: '13px', fontFamily: 'monospace', color: '#2a3a44'
     }).setOrigin(0.5);
   }
@@ -153,18 +165,21 @@ export class ResultScene extends Phaser.Scene {
     }).setOrigin(0.5); y += 38;
 
     const resColor = p.result === 'COMPLETE' ? '#66EE88' : '#EE5544';
-    const resText  = p.result === 'COMPLETE' ? 'COMPLETE' : 'ELIMINATED';
+    const resText  = p.result === 'COMPLETE' ? 'COMPLETE'
+      : p.result === 'LEFT BEHIND' ? 'LEFT BEHIND'
+      : p.result === 'FAILED'      ? 'FAILED'
+      : 'ELIMINATED';
     this.add.text(cx, y, resText, {
       fontSize: '20px', fontFamily: 'monospace', color: resColor
     }).setOrigin(0.5); y += 30;
 
     this.add.text(cx, y, `${p.distance} / ${this.trackData.length}`, {
       fontSize: '15px', fontFamily: 'monospace', color: '#BBCCDD'
-    }).setOrigin(0.5); y += 22;
+    }).setOrigin(0.5); y += 20;
 
     this.add.text(cx, y, `${p.elapsed}s`, {
       fontSize: '15px', fontFamily: 'monospace', color: '#BBCCDD'
-    }).setOrigin(0.5); y += 30;
+    }).setOrigin(0.5); y += 26;
 
     this.add.text(cx, y, 'Loadout:', {
       fontSize: '12px', fontFamily: 'monospace', color: '#445566'
@@ -172,23 +187,25 @@ export class ResultScene extends Phaser.Scene {
 
     p.loadout.forEach(id => {
       const b = BOOSTS[id];
-      this.add.text(cx, y, `${b.name}  (${b.type})`, {
+      const uses = p.boostUses?.[id];
+      const usesStr = (b.type === 'active' && uses !== undefined) ? `  ×${uses}` : '';
+      this.add.text(cx, y, `${b.name}${usesStr}`, {
         fontSize: '12px', fontFamily: 'monospace',
         color: b.type === 'passive' ? '#448866' : '#886644'
-      }).setOrigin(0.5); y += 18;
+      }).setOrigin(0.5); y += 17;
     });
   }
 
   // ─── SHARED HELPERS ───────────────────────────────────────────────────────
 
-  // Compact XP row for 2P result (drawn under each player's panel column)
-  _drawXpSection2P(isWin, distance, slot, cx) {
-    const y = 480;
+  _drawXpSection2P(isWin, distance, slot, cx, isWinner = false) {
+    const y = 488;
     const state = loadProgress(slot);
-    const { gained, levelsGained } = awardXP(state, distance, isWin, slot);
+    const { gained, levelsGained } = awardXP(state, distance, isWin, slot, isWinner);
 
-    const xpPop = this.add.text(cx, y + 30, `+${gained} XP`, {
-      fontSize: '24px', fontFamily: 'monospace', color: '#FFE044',
+    const label = isWinner ? `+${gained} XP  ★ +25 win` : `+${gained} XP`;
+    const xpPop = this.add.text(cx, y + 30, label, {
+      fontSize: '22px', fontFamily: 'monospace', color: '#FFE044',
       stroke: '#000000', strokeThickness: 3
     }).setOrigin(0.5).setAlpha(0);
 

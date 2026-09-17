@@ -212,19 +212,43 @@ export class RunScene extends Phaser.Scene {
       this.scene.start('ResultScene', { mode: '1p', result: ps.gs, distance: dist, elapsed,
         trackData: this.trackData, loadout: ps.loadout, ...replayData });
     } else {
-      const players = state.players.map(ps => {
-        const dist = Math.floor(ps.trackPosition / POSITION_SCALE);
-        const ticks = ps.gsEndTick >= 0 ? ps.gsEndTick : state.tick;
-        const elapsed = parseFloat((ticks / TICK_RATE).toFixed(2));
-        appendLog({ track: this.trackData.id, loadout: ps.loadout,
-          outcome: ps.gs === 'COMPLETE' ? 'complete' : 'failed', distance: dist,
-          elapsedMs: Math.round(elapsed * 1000), boostUses: { ...ps.boostUseCount },
-          laneTimeTicks: [...ps.laneTimeTicks], planningTimeMs: this.planningTimeMs,
-          mode: '2p', player: ps.idx + 1 });
-        return { result: ps.gs, distance: dist, elapsed, loadout: ps.loadout };
+      const pData = state.players.map(ps => {
+        const dist    = Math.floor(ps.trackPosition / POSITION_SCALE);
+        const endTick = ps.gsEndTick >= 0 ? ps.gsEndTick : state.tick;
+        const elapsed = parseFloat((endTick / TICK_RATE).toFixed(2));
+        return { result: ps.gs, distance: dist, elapsed,
+          loadout: [...ps.loadout], boostUses: { ...ps.boostUseCount },
+          laneTimeTicks: [...ps.laneTimeTicks] };
       });
+
+      // Determine winner for log + XP bonus
+      const [d0, d1] = [pData[0], pData[1]];
+      const winner = (() => {
+        const c0 = d0.result === 'COMPLETE', c1 = d1.result === 'COMPLETE';
+        if (c0 && c1) { if (d0.elapsed < d1.elapsed) return 'p1'; if (d1.elapsed < d0.elapsed) return 'p2'; return 'draw'; }
+        if (c0) return 'p1'; if (c1) return 'p2';
+        if (d0.distance > d1.distance) return 'p1'; if (d1.distance > d0.distance) return 'p2';
+        return 'draw';
+      })();
+
+      appendLog({
+        track: this.trackData.id, mode: '2p',
+        players: [
+          { slot: 'p1', loadout: d0.loadout, outcome: d0.result === 'COMPLETE' ? 'complete' : 'failed',
+            distance: d0.distance, elapsedMs: Math.round(d0.elapsed * 1000),
+            boostUses: d0.boostUses, laneTimeTicks: d0.laneTimeTicks },
+          { slot: 'p2', loadout: d1.loadout, outcome: d1.result === 'COMPLETE' ? 'complete' : 'failed',
+            distance: d1.distance, elapsedMs: Math.round(d1.elapsed * 1000),
+            boostUses: d1.boostUses, laneTimeTicks: d1.laneTimeTicks }
+        ],
+        winner, planningTimeMs: this.planningTimeMs
+      });
+
       this.time.delayedCall(1500, () => {
-        this.scene.start('ResultScene', { mode: '2p', trackData: this.trackData, players });
+        this.scene.start('ResultScene', {
+          mode: '2p', trackData: this.trackData, players: pData,
+          winner, planningTimeMs: this.planningTimeMs
+        });
       });
     }
   }
