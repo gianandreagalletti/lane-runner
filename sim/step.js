@@ -1,11 +1,34 @@
-import { BOOSTS } from '../src/boosts.js';
+import { BOOSTS, BOOST_CONFIG } from '../src/boosts.js';
 import {
   REACTIVE_WINDOW_TICKS, PRESS_AHEAD_TICKS, SPRINT_TICKS,
   ICE_DEBUFF_TICKS, WATER_DEBUFF_TICKS, FLASH_TICKS,
   LANE_SWITCH_TICKS, PHASE_ALPHA_TICKS,
-  BASE_SPEED_TICKS, SPRINT_SPEED_TICKS, ICE_SPEED_TICKS, WATER_SPEED_TICKS,
-  GAP_ELIMINATION_SCALED, COL_HALF_Y_SCALED
+  BASE_SPEED_CU,
+  GAP_ELIMINATION_CU, COL_HALF_Y_SCALED
 } from './rules.js';
+
+// Speed helper: Math.floor(BASE_SPEED_CU * factorPct / 100)
+function _speedFromFactor(factorPct) {
+  return Math.floor(BASE_SPEED_CU * factorPct / 100);
+}
+
+// Get the effective speed factor percentage for a player this tick
+function _speedFactorPct(ps) {
+  if (ps.sprintTicksLeft > 0) return 140;
+  if (ps.debuffType === 'ice') {
+    const level = ps.passives?.ice_grip ?? 0;
+    if (level >= 2) return BOOST_CONFIG.passives.ice_grip.levels[1].factorPct;   // 75
+    if (level >= 1) return BOOST_CONFIG.passives.ice_grip.levels[0].factorPct;   // 62
+    return BOOST_CONFIG.passives.ice_grip.baseFactorPct;                          // 50
+  }
+  if (ps.debuffType === 'water') {
+    const level = ps.passives?.water_shield ?? 0;
+    if (level >= 2) return BOOST_CONFIG.passives.water_shield.levels[1].factorPct;  // 65
+    if (level >= 1) return BOOST_CONFIG.passives.water_shield.levels[0].factorPct;  // 47
+    return BOOST_CONFIG.passives.water_shield.baseFactorPct;                         // 30
+  }
+  return 100;
+}
 
 export function step(state, intents) {
   const s = {
@@ -23,7 +46,10 @@ export function step(state, intents) {
       boostPressTimer:[...ps.boostPressTimer],
       boostKeyHeld:   [...ps.boostKeyHeld],
       laneTimeTicks:  [...ps.laneTimeTicks],
-      boostUseCount:  { ...ps.boostUseCount }
+      boostUseCount:  { ...ps.boostUseCount },
+      passives:       { ...ps.passives },
+      actives:        { ...ps.actives },
+      loadout:        { passives: { ...ps.loadout.passives }, actives: { ...ps.loadout.actives } }
     }))
   };
 
@@ -61,15 +87,26 @@ function _processIntent(s, ps, intent) {
     const sl = ps.slots[i];
     if (!sl) return;
     if (ps.gs === 'RUNNING') {
-      if (sl.isActive && !sl.isReactive && sl.uses > 0 && sl.id === 'sprint') {
-        sl.uses--; ps.boostUseCount[sl.id]++;
+      // Sprint (slot 1): non-reactive active
+      if (sl.id === 'sprint' && sl.uses > 0) {
+        sl.uses--; ps.boostUseCount.sprint++;
         ps.sprintTicksLeft = SPRINT_TICKS;
       }
-      if (sl.isReactive && sl.uses > 0) {
+      // Phase (slot 2): non-reactive, works on ice/water only
+      // Phase does NOT enter the reactive window and does NOT fire preemptively
+      if (sl.id === 'phase' && sl.uses > 0) {
+        // Phase is handled at collision time in RUNNING state
+        // Just arm it via boostPressTimer so _handleCollision can pick it up
+        ps.boostPressTimer[i] = PRESS_AHEAD_TICKS;
+      }
+      // Rock break (slot 0): reactive — arm the press-ahead timer
+      if (sl.id === 'rock_break' && sl.isReactive && sl.uses > 0) {
         ps.boostPressTimer[i] = PRESS_AHEAD_TICKS;
       }
     } else if (ps.gs === 'REACTIVE') {
-      _tryReactiveBoost(s, ps, i);
+      // Only slot 0 (rock_break) can cancel a lethal rock collision in reactive window
+      // Slot 2 (phase) is explicitly rejected here
+      if (i !== 2) _tryReactiveBoost(s, ps, i);
     }
   }
 }
@@ -78,7 +115,7 @@ function _switchLane(ps, dir) {
   const n = ps.lane + dir;
   if (n < 0 || n > 2) return;
   ps.laneVisualFrom = ps.lane;
-  ps.laneVisualTicksLeft = ps.boostSet.includes('quick_step') ? 0 : LANE_SWITCH_TICKS;
+  ps.laneVisualTicksLeft = ps.quickStepTicks ?? LANE_SWITCH_TICKS;
   ps.lane = n;
 }
 
@@ -98,10 +135,8 @@ function _tickPlayer(s, ps) {
   ps.laneTimeTicks[ps.lane]++;
 
   if (ps.gs === 'RUNNING') {
-    const speed = ps.sprintTicksLeft > 0 ? SPRINT_SPEED_TICKS
-      : ps.debuffType === 'ice'   ? ICE_SPEED_TICKS
-      : ps.debuffType === 'water' ? WATER_SPEED_TICKS
-      : BASE_SPEED_TICKS;
+    const factorPct = _speedFactorPct(ps);
+    const speed = _speedFromFactor(factorPct);
     ps.trackPosition += speed;
 
     const obsIdx = _findCollision(s.obstacles, ps);
@@ -124,10 +159,45 @@ function _findCollision(obstacles, ps) {
 
 function _handleCollision(s, ps, obsIdx) {
   const obs = s.obstacles[obsIdx];
-  if (obs.type === 'rock') { _enterReactive(s, ps, obsIdx); return; }
+
+  if (obs.type === 'rock') {
+    // Check if rock_break is pre-armed (press-ahead)
+    const rbSlot = ps.slots[0]; // slot 0 = rock_break
+    if (rbSlot && rbSlot.id === 'rock_break' && rbSlot.uses > 0 &&
+        (ps.boostKeyHeld[0] || ps.boostPressTimer[0] > 0)) {
+      ps.reactiveObsIdx = obsIdx;
+      obs.pendingByPlayer[ps.idx] = true;
+      _tryReactiveBoost(s, ps, 0);
+      return;
+    }
+    _enterReactive(s, ps, obsIdx);
+    return;
+  }
+
+  // Ice or water: check if phase is pre-armed
+  const phaseSlot = ps.slots[2]; // slot 2 = phase
+  if (phaseSlot && phaseSlot.id === 'phase' && phaseSlot.uses > 0 &&
+      (ps.boostKeyHeld[2] || ps.boostPressTimer[2] > 0)) {
+    // Phase through ice/water
+    phaseSlot.uses--; ps.boostUseCount.phase++;
+    ps.boostPressTimer[2] = 0;
+    obs.hitByPlayer[ps.idx] = true;
+    s.events.push({ type: 'phase', playerIdx: ps.idx, obsLane: obs.lane, obsDistScaled: obs.distanceScaled });
+    ps.drawAlpha = 0.4; ps.drawAlphaTicksLeft = PHASE_ALPHA_TICKS;
+    return;
+  }
+
+  // Normal ice/water hit: apply debuff based on passive level
   obs.hitByPlayer[ps.idx] = true;
-  if (obs.type === 'ice'   && !ps.boostSet.includes('ice_grip'))     _applyDebuff(ps, 'ice');
-  if (obs.type === 'water' && !ps.boostSet.includes('water_shield')) _applyDebuff(ps, 'water');
+  if (obs.type === 'ice') {
+    const level = ps.passives?.ice_grip ?? 0;
+    // Only apply debuff if we have no full immunity (no level gives full immunity by default)
+    // Level 2 = 75% = still debuffed but faster, so always apply debuff
+    _applyDebuff(ps, 'ice');
+  }
+  if (obs.type === 'water') {
+    _applyDebuff(ps, 'water');
+  }
 }
 
 function _applyDebuff(ps, type) {
@@ -138,14 +208,13 @@ function _applyDebuff(ps, type) {
 
 function _enterReactive(s, ps, obsIdx) {
   const obs = s.obstacles[obsIdx];
-  for (let i = 0; i < 3; i++) {
-    const sl = ps.slots[i];
-    if (!sl || !sl.isReactive || sl.uses <= 0) continue;
-    if (sl.id === 'rock_break' && obs.type !== 'rock') continue;
-    if (ps.boostKeyHeld[i] || ps.boostPressTimer[i] > 0) {
+  // Only slot 0 (rock_break) can enter/resolve reactive
+  const rbSlot = ps.slots[0];
+  if (rbSlot && rbSlot.id === 'rock_break' && rbSlot.uses > 0) {
+    if (ps.boostKeyHeld[0] || ps.boostPressTimer[0] > 0) {
       ps.reactiveObsIdx = obsIdx;
       obs.pendingByPlayer[ps.idx] = true;
-      _tryReactiveBoost(s, ps, i);
+      _tryReactiveBoost(s, ps, 0);
       return;
     }
   }
@@ -154,21 +223,20 @@ function _enterReactive(s, ps, obsIdx) {
 }
 
 function _tryReactiveBoost(s, ps, slotIdx) {
+  // Phase (slot 2) is explicitly NOT allowed in the reactive window
+  if (slotIdx === 2) return;
   const sl = ps.slots[slotIdx];
   if (!sl || !sl.isActive || !sl.isReactive || sl.uses <= 0) return;
   if (ps.reactiveObsIdx < 0) return;
   const obs = s.obstacles[ps.reactiveObsIdx];
+  // rock_break only works on rocks
   if (sl.id === 'rock_break' && obs.type !== 'rock') return;
-  sl.uses--; ps.boostUseCount[sl.id]++;
+  sl.uses--; ps.boostUseCount.rock_break++;
   ps.boostPressTimer[slotIdx] = 0;
   if (sl.id === 'rock_break') {
     obs.hitByPlayer = obs.hitByPlayer.map(() => true);
     obs.pendingByPlayer = obs.pendingByPlayer.map(() => false);
     s.events.push({ type: 'rock_break', playerIdx: ps.idx, obsLane: obs.lane, obsDistScaled: obs.distanceScaled });
-  } else {
-    obs.hitByPlayer[ps.idx] = true; obs.pendingByPlayer[ps.idx] = false;
-    s.events.push({ type: 'phase', playerIdx: ps.idx, obsLane: obs.lane, obsDistScaled: obs.distanceScaled });
-    ps.drawAlpha = 0.4; ps.drawAlphaTicksLeft = PHASE_ALPHA_TICKS;
   }
   ps.reactiveObsIdx = -1;
   if (ps.gs === 'REACTIVE') { ps.gs = 'RUNNING'; ps.reactiveTicksLeft = 0; }
@@ -190,7 +258,7 @@ function _checkGapElimination(s) {
   const leaderPos = Math.max(...active.map(ps => ps.trackPosition));
   for (const ps of active) {
     const gap = leaderPos - ps.trackPosition;
-    if (gap >= GAP_ELIMINATION_SCALED) {
+    if (gap >= GAP_ELIMINATION_CU) {
       ps.gs = 'LEFT BEHIND'; ps.gsEndTick = s.tick;
       s.events.push({ type: 'left_behind', playerIdx: ps.idx });
     }

@@ -1,11 +1,46 @@
-import { BOOSTS } from '../src/boosts.js';
-import { POSITION_SCALE } from './rules.js';
+import { BOOSTS, BOOST_CONFIG } from '../src/boosts.js';
+import { CENTI_SCALE, LANE_SWITCH_TICKS } from './rules.js';
+
+// Fixed canonical slot mapping (always in this order regardless of charges bought)
+// Slot 0: rock_break, Slot 1: sprint, Slot 2: phase
+const CANONICAL_SLOTS = ['rock_break', 'sprint', 'phase'];
+
+// Verify no band has rocks in all 3 lanes (hard constraint)
+function _assertNoAllRockBands(trackData) {
+  // Group obstacles by distance band
+  const bands = {};
+  for (const obs of trackData.obstacles) {
+    const key = obs.distance;
+    if (!bands[key]) bands[key] = [];
+    bands[key].push(obs);
+  }
+  for (const [dist, obs] of Object.entries(bands)) {
+    const rockLanes = new Set(obs.filter(o => o.type === 'rock').map(o => o.lane));
+    if (rockLanes.has(0) && rockLanes.has(1) && rockLanes.has(2)) {
+      throw new Error(
+        `Track "${trackData.id}" has rocks in ALL 3 lanes at distance ${dist}. ` +
+        `This violates the hard constraint: no band may have rocks in all 3 lanes.`
+      );
+    }
+  }
+}
+
+// Get quick_step lane switch ticks from loadout
+function _getQuickStepTicks(loadout) {
+  const level = loadout.passives?.quick_step ?? 0;
+  if (level >= 2) return BOOST_CONFIG.passives.quick_step.levels[1].ticks; // 0
+  if (level >= 1) return BOOST_CONFIG.passives.quick_step.levels[0].ticks; // 5
+  return BOOST_CONFIG.passives.quick_step.baseTicks; // 9 = LANE_SWITCH_TICKS
+}
 
 export function createInitialState(matchConfig, trackData) {
+  // Validate track: no all-rock bands
+  _assertNoAllRockBands(trackData);
+
   const numPlayers = matchConfig.players.length;
   const obstacles = trackData.obstacles.map(o => ({
     lane:            o.lane,
-    distanceScaled:  o.distance * POSITION_SCALE,
+    distanceScaled:  o.distance * CENTI_SCALE,
     type:            o.type,
     hitByPlayer:     new Array(numPlayers).fill(false),
     pendingByPlayer: new Array(numPlayers).fill(false)
@@ -13,15 +48,38 @@ export function createInitialState(matchConfig, trackData) {
 
   const players = matchConfig.players.map(pc => {
     const loadout = pc.loadout;
-    const slots = loadout.map(id => {
+
+    // Support both old array format (legacy) and new object format
+    let passives, actives;
+    if (Array.isArray(loadout)) {
+      // Legacy: convert array to object format
+      passives = { ice_grip: 0, water_shield: 0, quick_step: 0 };
+      actives  = { rock_break: 0, sprint: 0, phase: 0 };
+      for (const id of loadout) {
+        const b = BOOSTS[id];
+        if (!b) continue;
+        if (b.type === 'passive') passives[id] = 1;
+        else if (b.type === 'active') actives[id] = (BOOSTS[id].usesPerRun ?? 1);
+      }
+    } else {
+      passives = { ...loadout.passives };
+      actives  = { ...loadout.actives };
+    }
+
+    // Build canonical slots (always rock_break=0, sprint=1, phase=2)
+    const slots = CANONICAL_SLOTS.map(id => {
       const b = BOOSTS[id];
+      const charges = actives[id] ?? 0;
       return {
         id,
-        uses:       b.type === 'active' ? b.usesPerRun : null,
-        isActive:   b.type === 'active',
-        isReactive: b.type === 'active' ? b.reactive : false
+        uses:       charges,
+        isActive:   true,
+        isReactive: id === 'rock_break' // only rock_break is reactive (phase is NOT)
       };
     });
+
+    const quickStepTicks = _getQuickStepTicks({ passives });
+
     return {
       idx:                pc.slot,
       lane:               1,
@@ -31,10 +89,12 @@ export function createInitialState(matchConfig, trackData) {
       debuffType:         null,
       debuffTicksLeft:    0,
       flashTicksLeft:     0,
-      loadout:            [...loadout],
-      boostSet:           [...loadout],
+      loadout:            { passives: { ...passives }, actives: { ...actives } },
+      passives,
+      actives,
       slots,
-      boostUseCount:      Object.fromEntries(loadout.map(id => [id, 0])),
+      boostUseCount:      { rock_break: 0, sprint: 0, phase: 0 },
+      quickStepTicks,     // cached ticks for lane switch
       laneTimeTicks:      [0, 0, 0],
       reactiveTicksLeft:  0,
       reactiveObsIdx:     -1,
@@ -45,14 +105,17 @@ export function createInitialState(matchConfig, trackData) {
       laneVisualFrom:     1,
       laneVisualTicksLeft: 0,
       drawAlpha:          1.0,
-      drawAlphaTicksLeft: 0
+      drawAlphaTicksLeft: 0,
+      // Phase activation state (non-reactive: manually triggered)
+      phaseActive:        false,
+      phasePendingObsIdx: -1
     };
   });
 
   return {
     tick:              0,
     mode:              matchConfig.mode,
-    trackLength:       trackData.length * POSITION_SCALE,
+    trackLength:       trackData.length * CENTI_SCALE,
     numPlayers,
     obstacles,
     players,
