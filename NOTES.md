@@ -1,3 +1,69 @@
+# Session 6 — Perspective Run View
+
+## Architecture
+
+- `src/render/projection.js` — pure projection math, no Phaser imports.
+  `PROJ` config, `initProjection(w,h)`, `project(worldX, zRel) → {x,y,scale}`.
+  Lane centres in track units: `LANE_TU = [-240, 0, 240]`.
+  `PERSPECTIVE_BLEND=0` produces flat view; `=1` produces full perspective.
+
+- `src/render/GroundRenderer.js` — sky gradient, ground gradient, ~40 back-to-front lane
+  quad segments with fog blending, alternating-segment shading keyed off absolute track
+  distance, outer kerb strips, and two-layer parallax skyline.
+
+- `src/obstacles.js` — each obstacle is a 3D box: top face + front face (66% brightness).
+  Fog blending, shape marks (rock=cross, ice=diagonals, water=waves) for colorblind safety.
+  Distance-sorted culling via `_startIdx` pointer (no full-scan per frame).
+
+- `src/player.js` — billboard: rounded-rect body, elliptical shadow, lower-third volume band,
+  debuff glow, flash colour, sprint streaks. Exposes `x`, `y`, `screenScale` for HUD use.
+
+- `src/RunScene.js` — perspective `cameraZ` replaces old zoom. All renderables (obstacles +
+  players) merged into a single far-to-near list for correct occlusion. GroundRenderer drawn
+  first. Resize listener calls `initProjection`.
+
+- `src/RunSceneRenderer.js` — warning arrows and player labels use projected `playerObj.x`
+  rather than pixel lane centres. `handleSimEvents` derives cameraZ identically to `_render`.
+
+## Camera formula
+
+```
+cameraZ = min(minPlayerZ - CAM_BACK, maxPlayerZ - CAM_BACK - MIN_LEAD_MARGIN)
+```
+Camera sits CAM_BACK (320 tu) behind the slowest player, but never so close that the
+leader clips past the near plane. `MIN_LEAD_MARGIN=200` ensures leader stays visible.
+
+## Projection tuning
+
+Key knobs in `PROJ` (src/render/projection.js):
+- `PERSPECTIVE_BLEND` — 0=flat, 1=full perspective. Default 0.92.
+- `HORIZON_Y_RATIO` — horizon height as fraction of canvas. Default 0.23.
+- `FOCAL_RATIO` — focal length as fraction of canvas width. Default 0.20.
+- `PLAYER_ANCHOR_Y_RATIO` — screen Y where player stands. Default 0.80.
+- `DRAW_DISTANCE` — how far ahead to draw (track units). Default 3400.
+- `CAM_BACK` — camera offset behind player (track units). Default 320.
+
+## Coordinate mapping
+
+`worldX` is in track units; lane centres at `[-240, 0, 240]`. At `zRel=CAM_BACK`,
+scale factor `sF = FOCAL/CAM_BACK = 256/320 = 0.8`. Lane centre 240 maps to screen
+`640 + 240*0.8 = 832px`; centre -240 maps to 448px. Each lane spans ~192px at player depth.
+
+## Performance notes
+
+- One Graphics object each for ground, obstacles, players — cleared each frame.
+- Obstacle culling: `_startIdx` advances as camera moves forward; no full scan.
+- Lane segments: ~40 quads per frame (DRAW_DISTANCE / SEGMENT_LEN ≈ 40).
+- Skyline: deterministic building layout (no Math.random), two layers, tiled with wrap.
+
+## Network-readiness preserved
+
+- sim/ untouched — replay determinism guaranteed.
+- No gameplay values written from renderer.
+- `grep -rn "from.*sim/" src/render/` returns nothing.
+
+---
+
 # Session 5 — Centi-units, Levelled Passives, Shop UI
 
 ## Clean run timing
