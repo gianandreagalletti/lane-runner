@@ -1,107 +1,60 @@
 import {
-  LANE_CENTERS,
-  PLAYER_Y,
-  OBS_W,
-  OBS_H,
-  OBS_COLORS
+  LANE_CENTERS, PLAYER_Y, OBS_W, OBS_H, OBS_COLORS
 } from './track.js';
+import { POSITION_SCALE } from '../sim/rules.js';
 
 export class Obstacles {
-  constructor(scene, trackData, opts = {}) {
-    this.scene = scene;
-
-    // numPlayers controls draw behaviour:
-    //   1 → hide obstacle once player 0 has resolved it  (1P behaviour, unchanged)
-    //   2 → always draw; each player resolves independently
-    this.numPlayers  = opts.numPlayers || 1;
-    this.laneCenters = opts.laneCenters || LANE_CENTERS;
-    this.obsW = opts.obsW || OBS_W;
-    this.obsH = opts.obsH || OBS_H;
-    this.sx = this.obsW / OBS_W;
-    this.sy = this.obsH / OBS_H;
-    this.colHalfX = this.obsW / 2 + 20 * this.sx;
-    this.colHalfY = this.obsH / 2 + 20 * this.sy;
-
-    this.list = trackData.obstacles.map(o => ({
-      lane:     o.lane,
-      distance: o.distance,
-      type:     o.type,
-      // per-player resolved flags (index = player idx)
-      hitByPlayer:     [false, false],
-      pendingByPlayer: [false, false],
-      screenY: -9999
-    }));
-    this.graphics    = scene.add.graphics();
-    this.labelGraphs = scene.add.graphics();
-    this.labels      = [];
+  constructor(scene, numPlayers = 1) {
+    this.scene      = scene;
+    this.numPlayers = numPlayers;
+    this.graphics   = scene.add.graphics();
+    // scale factors for decorative drawing (same logic as before)
+    this.sx = OBS_W / OBS_W; // = 1 (kept for _drawRock/_drawIce/_drawWater compat)
+    this.sy = OBS_H / OBS_H; // = 1
   }
 
-  // trackPosition should be the camera reference (leader's position in 2P)
-  update(trackPosition) {
-    for (const obs of this.list) {
-      obs.screenY = PLAYER_Y + trackPosition - obs.distance;
-    }
-    this._draw();
-  }
-
-  // playerScreenY defaults to PLAYER_Y so 1P callers don't need to change.
-  checkCollision(playerX, playerScreenY = PLAYER_Y, playerIdx = 0) {
-    for (const obs of this.list) {
-      if (obs.hitByPlayer[playerIdx] || obs.pendingByPlayer[playerIdx]) continue;
-      const dx = Math.abs(playerX - this.laneCenters[obs.lane]);
-      const dy = Math.abs(obs.screenY - playerScreenY);
-      if (dx < this.colHalfX && dy < this.colHalfY) return obs;
-    }
-    return null;
-  }
-
-  markHit(obs, playerIdx = 0)     { obs.hitByPlayer[playerIdx] = true;  obs.pendingByPlayer[playerIdx] = false; }
-  markPending(obs, playerIdx = 0) { obs.pendingByPlayer[playerIdx] = true; }
-  clearPending(obs, playerIdx = 0){ obs.pendingByPlayer[playerIdx] = false; obs.hitByPlayer[playerIdx] = true; }
-  // Rock Break: destroys for all players (shared destruction)
-  markHitAll(obs) { obs.hitByPlayer = [true, true]; obs.pendingByPlayer = [false, false]; }
-
-  destroy() { this.graphics.destroy(); }
-
-  _draw() {
+  // obstacles = state.obstacles array; camPositionScaled = leader's trackPosition (sub-units)
+  render(obstacles, camPositionScaled) {
     const g = this.graphics;
     g.clear();
-    for (const obs of this.list) {
-      // Hide once all active players have resolved this obstacle.
-      // In 1P: hide when player 0 has resolved it.
-      // In 2P: hide only when BOTH players have resolved it (rock_break uses markHitAll;
-      //         phase only resolves for the phasing player via clearPending).
+    for (const obs of obstacles) {
       const allHit = obs.hitByPlayer[0] && (this.numPlayers < 2 || obs.hitByPlayer[1]);
       if (allHit) continue;
 
-      const sy = obs.screenY;
-      if (sy < -this.obsH - 2 || sy > this.scene.scale.height + this.obsH) continue;
+      const screenY = PLAYER_Y + (camPositionScaled - obs.distanceScaled) / POSITION_SCALE;
+      if (screenY < -OBS_H - 2 || screenY > this.scene.scale.height + OBS_H) continue;
 
-      const cx   = this.laneCenters[obs.lane];
-      const left = cx - this.obsW / 2;
-      const top  = sy  - this.obsH / 2;
+      const cx   = LANE_CENTERS[obs.lane];
+      const left = cx - OBS_W / 2;
+      const top  = screenY - OBS_H / 2;
 
       g.fillStyle(OBS_COLORS[obs.type]);
-      g.fillRect(left, top, this.obsW, this.obsH);
+      g.fillRect(left, top, OBS_W, OBS_H);
 
-      if (obs.type === 'rock')  this._drawRock(g, left, top, cx, sy);
-      if (obs.type === 'ice')   this._drawIce(g, left, top, cx, sy);
-      if (obs.type === 'water') this._drawWater(g, left, top, cx, sy);
+      if (obs.type === 'rock')  this._drawRock(g, left, top, cx, screenY);
+      if (obs.type === 'ice')   this._drawIce(g, left, top, cx, screenY);
+      if (obs.type === 'water') this._drawWater(g, left, top, cx, screenY);
 
       const isPending = obs.pendingByPlayer[0] || obs.pendingByPlayer[1];
       if (isPending) {
         g.lineStyle(4, 0xFFFF00, 0.9);
-        g.strokeRect(left - 2, top - 2, this.obsW + 4, this.obsH + 4);
+        g.strokeRect(left - 2, top - 2, OBS_W + 4, OBS_H + 4);
       } else {
         g.lineStyle(2, 0x000000, 0.3);
-        g.strokeRect(left, top, this.obsW, this.obsH);
+        g.strokeRect(left, top, OBS_W, OBS_H);
       }
     }
   }
 
-  // ── ROCK: bold X mark ──────────────────────────────────────────────────────
+  // Helper for effects: get screen Y of an obstacle given camPositionScaled
+  getScreenY(obs, camPositionScaled) {
+    return PLAYER_Y + (camPositionScaled - obs.distanceScaled) / POSITION_SCALE;
+  }
+
+  destroy() { this.graphics.destroy(); }
+
   _drawRock(g, left, top, cx, cy) {
-    const { sx, sy } = this;
+    const sx = 1, sy = 1;
     g.fillStyle(0x5A1510, 0.5);
     g.fillRect(left + 14*sx, top + 10*sy, 26*sx, 14*sy);
     g.fillRect(left + 68*sx, top +  6*sy, 20*sx, 18*sy);
@@ -112,9 +65,8 @@ export class Obstacles {
     g.beginPath(); g.moveTo(cx + hw, cy - hh); g.lineTo(cx - hw, cy + hh); g.strokePath();
   }
 
-  // ── ICE: snowflake cross ───────────────────────────────────────────────────
   _drawIce(g, left, top, cx, cy) {
-    const { sx, sy, obsW, obsH } = this;
+    const sx = 1, sy = 1, obsW = OBS_W, obsH = OBS_H;
     const right = left + obsW, bottom = top + obsH;
     g.lineStyle(1, 0x7BB8D8, 0.45);
     for (let i = -obsH; i < obsW; i += 20 * sx) {
@@ -135,9 +87,8 @@ export class Obstacles {
     }
   }
 
-  // ── WATER: wave lines + circles ───────────────────────────────────────────
   _drawWater(g, left, top, cx, cy) {
-    const { sx, sy, obsW, obsH } = this;
+    const sx = 1, sy = 1, obsW = OBS_W, obsH = OBS_H;
     const right = left + obsW;
     g.lineStyle(2, 0x1E6888, 0.7);
     for (let dy = 12*sy; dy < obsH; dy += 14*sy) {
@@ -146,7 +97,7 @@ export class Obstacles {
     g.fillStyle(0x1E6888, 0.75);
     for (let dy = 12*sy; dy < obsH; dy += 14*sy) {
       for (let dx = 20*sx; dx < obsW - 10*sx; dx += 36*sx) {
-        g.fillCircle(left + dx, top + dy, 4 * Math.min(sx, sy));
+        g.fillCircle(left + dx, top + dy, 4);
       }
     }
   }
