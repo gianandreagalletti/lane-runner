@@ -11,32 +11,40 @@ import {
   BASE_SPEED, LANE_CENTERS, PLAYER_Y
 } from './track.js';
 
-const REACTIVE_WINDOW_MS = 250;
+// ── Reactive input config — tune during playtest ───────────────────────────
+const REACTIVE_WINDOW_MS = 450;   // widened from 250
+const PRESS_AHEAD_MS     = 400;   // a boost key pressed up to this many ms early is buffered
+
 const JD = key => Phaser.Input.Keyboard.JustDown(key);
 const KC = Phaser.Input.Keyboard.KeyCodes;
 
 // ── 2P tuning constants ────────────────────────────────────────────────────
-// Change GAP_ELIMINATION to adjust how far behind a player can fall before
-// they are eliminated.  Single number; no other edit needed.
-const GAP_ELIMINATION = 500;  // track units
-const GAP_WARNING     = 300;  // units — show pulsing arrow below this gap
-const TRAIL_PIN_Y     = CANVAS_H - 40; // visual pin when trailer off-screen
+const GAP_ELIMINATION = 500;
+const GAP_WARNING     = 300;
+const TRAIL_PIN_Y     = CANVAS_H - 40;
 
-// Boost key labels for reactive hints
 const BOOST_LABELS = { p1: ['1','2','3'], p2: ['8','9','0'] };
-
-// P2 amber colour
 const P2_COLOR = 0xE8A33D;
+
+// ── Armed indicator colours ────────────────────────────────────────────────
+const ARMED_STROKE   = 0xFFDD00;
+const UNARMED_STROKE_REACTIVE = 0x554422;
 
 export class RunScene extends Phaser.Scene {
   constructor() { super({ key: 'RunScene' }); }
 
   init(data) {
     this.trackData      = data.trackData;
-    this.loadout        = data.loadout;
-    this.boostSet       = new Set(data.loadout);
-    this.planningTimeMs = data.planningTimeMs ?? 0;
     this.mode           = data.mode || '1p';
+    this.planningTimeMs = data.planningTimeMs ?? 0;
+
+    if (this.mode === '2p') {
+      this.loadoutP1 = data.loadoutP1 ?? data.loadout ?? [];
+      this.loadoutP2 = data.loadoutP2 ?? data.loadout ?? [];
+    } else {
+      this.loadout  = data.loadout;
+      this.boostSet = new Set(data.loadout);
+    }
   }
 
   create() {
@@ -54,7 +62,7 @@ export class RunScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  1-PLAYER  (untouched from original)
+  //  1-PLAYER
   // ═══════════════════════════════════════════════════════════════════════════
 
   _create1P() {
@@ -75,6 +83,10 @@ export class RunScene extends Phaser.Scene {
                isActive: b.type === 'active',
                isReactive: b.type === 'active' ? b.reactive : false };
     });
+
+    // Press-ahead buffers and armed state (per slot)
+    this.boostPressTimer = [0, 0, 0];
+    this.boostArmed      = [false, false, false];
 
     this.laneGfx = this.add.graphics();
     this._drawLanes();
@@ -99,7 +111,6 @@ export class RunScene extends Phaser.Scene {
       align: 'center', stroke: '#000000', strokeThickness: 4
     }).setOrigin(0.5).setDepth(10);
 
-    // P1 primary keys (A/D); arrows also work in 1P
     this.keyLeft     = this.input.keyboard.addKey(KC[BINDINGS.p1.left]);
     this.keyRight    = this.input.keyboard.addKey(KC[BINDINGS.p1.right]);
     this.keyLeftAlt  = this.input.keyboard.addKey(KC.LEFT);
@@ -124,6 +135,9 @@ export class RunScene extends Phaser.Scene {
     if (JD(this.keyBoost[1])) this._tryActivate(1);
     if (JD(this.keyBoost[2])) this._tryActivate(2);
 
+    // Update press-ahead timers and armed state
+    this._updateBoostInputState1P(delta);
+
     this.player.update(delta);
     this.obstacles.update(this.trackPosition);
 
@@ -137,6 +151,44 @@ export class RunScene extends Phaser.Scene {
 
     if (this.trackPosition >= this.trackData.length) { this._endRun('COMPLETE'); return; }
     this._refreshHud();
+  }
+
+  // Update press-ahead timers and armed-state for 1P
+  _updateBoostInputState1P(delta) {
+    for (let i = 0; i < 3; i++) {
+      const key = this.keyBoost[i];
+      const slot = this.slots[i];
+      const wasArmed = this.boostArmed[i];
+
+      // Tick down press-ahead timer
+      if (this.boostPressTimer[i] > 0) {
+        this.boostPressTimer[i] = Math.max(0, this.boostPressTimer[i] - delta);
+      }
+
+      // Record fresh key presses as press-ahead
+      if (JD(key) && slot && slot.isReactive && slot.uses > 0) {
+        this.boostPressTimer[i] = PRESS_AHEAD_MS;
+      }
+
+      // Armed = key physically held AND slot has uses
+      this.boostArmed[i] = key.isDown && slot && slot.isReactive && slot.uses > 0;
+
+      // Update HUD armed indicator if state changed
+      if (wasArmed !== this.boostArmed[i]) {
+        this._updateHudArmIndicator1P(i);
+      }
+    }
+  }
+
+  _updateHudArmIndicator1P(i) {
+    const ref = this.hudSlotRefs[i];
+    const slot = this.slots[i];
+    if (!ref || !slot || !slot.isReactive) return;
+    if (this.boostArmed[i]) {
+      ref.chip.setStrokeStyle(2, ARMED_STROKE, 1);
+    } else {
+      ref.chip.setStrokeStyle(1, UNARMED_STROKE_REACTIVE);
+    }
   }
 
   _reactiveUpdate(delta) {
@@ -160,6 +212,20 @@ export class RunScene extends Phaser.Scene {
   }
 
   _enterReactive(obs) {
+    // Before opening the window, check if any reactive slot can auto-fire
+    for (let i = 0; i < 3; i++) {
+      const slot = this.slots[i];
+      if (!slot || !slot.isReactive || slot.uses <= 0) continue;
+      if (slot.id === 'rock_break' && obs.type !== 'rock') continue;
+      if (this.boostArmed[i] || this.boostPressTimer[i] > 0) {
+        // Auto-fire: set up obs so _tryReactiveBoost works, then fire
+        this.reactiveObs = obs;
+        this.obstacles.markPending(obs);
+        this._tryReactiveBoost(i);
+        return;
+      }
+    }
+    // No auto-fire — open the reactive window normally
     this.gameState = 'REACTIVE'; this.reactiveTimer = REACTIVE_WINDOW_MS;
     this.reactiveObs = obs; this.obstacles.markPending(obs);
   }
@@ -171,6 +237,8 @@ export class RunScene extends Phaser.Scene {
 
     slot.uses--;
     this.boostUseCount[slot.id]++;
+    // Consume press-ahead for this slot
+    this.boostPressTimer[slotIdx] = 0;
     this._refreshHudSlot(slotIdx);
 
     const obsX = LANE_CENTERS[this.reactiveObs.lane];
@@ -279,27 +347,23 @@ export class RunScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  2-PLAYER  — shared camera, shared lanes, per-player obstacle resolution
+  //  2-PLAYER
   // ═══════════════════════════════════════════════════════════════════════════
 
   _create2P() {
     this._2pEnded = false;
 
-    // Shared lanes — same geometry as 1P
     this.laneGfx = this.add.graphics();
     this._drawLanes();
 
-    // ONE shared obstacle instance; 2P mode keeps all obstacles drawn
     this.obstacles = new Obstacles(this, this.trackData, { numPlayers: 2 });
 
-    // Warning arrow (trailing player)
     this.warningArrow = this.add.graphics().setDepth(15);
     this.warningText  = this.add.text(0, 0, '', {
       fontSize: '13px', fontFamily: 'monospace', color: '#FF9900',
       stroke: '#000000', strokeThickness: 3
     }).setOrigin(0.5, 1).setDepth(15);
 
-    // Per-player input bindings
     const p1Keys = {
       left:  KC[BINDINGS.p1.left],  right: KC[BINDINGS.p1.right],
       boost: BINDINGS.p1.boost.map(k => KC[k])
@@ -323,24 +387,27 @@ export class RunScene extends Phaser.Scene {
   }
 
   _makePS(idx) {
+    const loadout = idx === 0 ? this.loadoutP1 : this.loadoutP2;
     return {
       idx,
-      loadout:       [...this.loadout],
-      boostSet:      this.boostSet,
-      slots: this.loadout.map(id => {
+      loadout:         [...loadout],
+      boostSet:        new Set(loadout),
+      slots: loadout.map(id => {
         const b = BOOSTS[id];
         return { id, uses: b.type === 'active' ? b.usesPerRun : null,
                  isActive: b.type === 'active',
                  isReactive: b.type === 'active' ? b.reactive : false };
       }),
-      boostUseCount: Object.fromEntries(this.loadout.map(id => [id, 0])),
-      laneTimeMs:    [0, 0, 0],
-      gs:            'RUNNING',
-      trackPosition: 0,
-      startTime:     this.time.now,
-      sprintTimer:   0, sprintMultiplier: 1,
-      reactiveTimer: 0, reactiveObs:     null,
-      // Phaser objects — set by _createPObjects:
+      boostUseCount:   Object.fromEntries(loadout.map(id => [id, 0])),
+      laneTimeMs:      [0, 0, 0],
+      gs:              'RUNNING',
+      trackPosition:   0,
+      startTime:       this.time.now,
+      sprintTimer:     0, sprintMultiplier: 1,
+      reactiveTimer:   0, reactiveObs:      null,
+      // Press-ahead and armed state (per slot)
+      boostPressTimer: [0, 0, 0],
+      boostArmed:      [false, false, false],
       player: null, reactiveOverlay: null, reactiveText: null,
       label:  null,
       keyLeft: null, keyRight: null, keyBoost: []
@@ -349,7 +416,6 @@ export class RunScene extends Phaser.Scene {
 
   _createPObjects(ps) {
     const isP2 = ps.idx === 1;
-    // P1 offset −30, P2 offset +30 from lane centre (cosmetic only)
     ps.player = new Player(this, {
       instantSwitch: ps.boostSet.has('quick_step'),
       visualOffsetX: isP2 ? 30 : -30,
@@ -358,14 +424,12 @@ export class RunScene extends Phaser.Scene {
 
     ps.reactiveOverlay = this.add.graphics();
 
-    // Reactive text: P1 left side, P2 right side of screen
     const rtX = isP2 ? 3 * CANVAS_W / 4 : CANVAS_W / 4;
     ps.reactiveText = this.add.text(rtX, CANVAS_H / 2 - 60, '', {
       fontSize: '28px', fontFamily: 'monospace', color: '#FFFF00',
       align: 'center', stroke: '#000000', strokeThickness: 4
     }).setOrigin(0.5).setDepth(10);
 
-    // Small floating label above sprite
     ps.label = this.add.text(0, 0, `P${ps.idx + 1}`, {
       fontSize: '12px', fontFamily: 'monospace',
       color: isP2 ? '#E8A33D' : '#FFFFFF',
@@ -374,18 +438,14 @@ export class RunScene extends Phaser.Scene {
   }
 
   _buildBoostHud2P() {
-    // P1 HUD: left side  P2 HUD: right side  Centre: gap indicator
     const chipW = 100, chipH = 26, chipSpacing = 110;
 
     for (const ps of this.ps) {
       const isP2  = ps.idx === 1;
-      const col   = isP2 ? '#E8A33D' : '#CCDDFF';
-      // Chips for P1 start at left, P2 at right
       const chip0X = isP2 ? (CANVAS_W - 55 - 2 * chipSpacing) : 55;
 
       ps.hud = {};
 
-      // Player label + distance
       if (!isP2) {
         ps.hud.labelT = this.add.text(10, 14, 'P1', {
           fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF',
@@ -422,7 +482,6 @@ export class RunScene extends Phaser.Scene {
         }).setOrigin(0.5, 0);
       }
 
-      // Boost chips
       ps.hud.chipRefs = [];
       ps.slots.forEach((slot, i) => {
         const cx   = chip0X + i * chipSpacing;
@@ -444,7 +503,6 @@ export class RunScene extends Phaser.Scene {
       });
     }
 
-    // Centre gap indicator
     this.gapText = this.add.text(CANVAS_W / 2, 14, '', {
       fontSize: '13px', fontFamily: 'monospace', color: '#556677',
       stroke: '#000', strokeThickness: 2
@@ -454,32 +512,24 @@ export class RunScene extends Phaser.Scene {
   // ── 2P per-frame update ───────────────────────────────────────────────────
 
   _update2P(delta) {
-    // Camera follows the leader (highest trackPosition)
     this._camPos = Math.max(this.ps[0].trackPosition, this.ps[1].trackPosition);
 
-    // Update shared obstacles once with camera position
     this.obstacles.update(this._camPos);
 
-    // Update each player's visual Y based on how far behind the leader they are
     for (const ps of this.ps) {
       const gap  = this._camPos - ps.trackPosition;
       ps.player.y = Math.min(PLAYER_Y + gap, TRAIL_PIN_Y);
     }
 
-    // Per-player logic
     for (const ps of this.ps) {
       if      (ps.gs === 'RUNNING')   this._runUpdateP(ps, delta);
       else if (ps.gs === 'REACTIVE')  this._reactiveUpdateP(ps, delta);
     }
 
-    // Gap-based elimination check (only while both still active)
     this._checkGapElimination();
-
-    // Update floating labels and shared UI
     this._updatePlayerLabels();
     this._updateWarningArrow();
     this._refreshHud2P();
-
     this._check2PEnd();
   }
 
@@ -500,9 +550,10 @@ export class RunScene extends Phaser.Scene {
       if (JD(ps.keyBoost[i])) this._tryActivateP(ps, i);
     }
 
+    // Update press-ahead timers and armed state for this player
+    this._updateBoostInputStateP(ps, delta);
+
     ps.player.update(delta);
-    // Obstacles are already updated for this frame in _update2P.
-    // Use the player's logical Y (not visually pinned) for accurate collision.
     const logY = PLAYER_Y + (this._camPos - ps.trackPosition);
     const hit  = this.obstacles.checkCollision(ps.player.x, logY, ps.idx);
     if (hit) {
@@ -515,9 +566,41 @@ export class RunScene extends Phaser.Scene {
     if (ps.trackPosition >= this.trackData.length) { this._endP(ps, 'COMPLETE'); return; }
   }
 
+  _updateBoostInputStateP(ps, delta) {
+    for (let i = 0; i < 3; i++) {
+      const key  = ps.keyBoost[i];
+      const slot = ps.slots[i];
+      const wasArmed = ps.boostArmed[i];
+
+      if (ps.boostPressTimer[i] > 0) {
+        ps.boostPressTimer[i] = Math.max(0, ps.boostPressTimer[i] - delta);
+      }
+
+      if (JD(key) && slot && slot.isReactive && slot.uses > 0) {
+        ps.boostPressTimer[i] = PRESS_AHEAD_MS;
+      }
+
+      ps.boostArmed[i] = key.isDown && slot && slot.isReactive && slot.uses > 0;
+
+      if (wasArmed !== ps.boostArmed[i]) {
+        this._updateHudArmIndicatorP(ps, i);
+      }
+    }
+  }
+
+  _updateHudArmIndicatorP(ps, i) {
+    const ref  = ps.hud.chipRefs[i];
+    const slot = ps.slots[i];
+    if (!ref || !slot || !slot.isReactive) return;
+    if (ps.boostArmed[i]) {
+      ref.chip.setStrokeStyle(2, ARMED_STROKE, 1);
+    } else {
+      ref.chip.setStrokeStyle(1, UNARMED_STROKE_REACTIVE);
+    }
+  }
+
   _reactiveUpdateP(ps, delta) {
     ps.reactiveTimer -= delta;
-    // Obstacles already updated — no second call needed.
 
     const frac = Math.max(0, ps.reactiveTimer / REACTIVE_WINDOW_MS);
     ps.reactiveOverlay.clear();
@@ -537,6 +620,18 @@ export class RunScene extends Phaser.Scene {
   }
 
   _enterReactiveP(ps, obs) {
+    // Check for auto-fire before opening the reactive window
+    for (let i = 0; i < 3; i++) {
+      const slot = ps.slots[i];
+      if (!slot || !slot.isReactive || slot.uses <= 0) continue;
+      if (slot.id === 'rock_break' && obs.type !== 'rock') continue;
+      if (ps.boostArmed[i] || ps.boostPressTimer[i] > 0) {
+        ps.reactiveObs = obs;
+        this.obstacles.markPending(obs, ps.idx);
+        this._tryReactiveBoostP(ps, i);
+        return;
+      }
+    }
     ps.gs = 'REACTIVE'; ps.reactiveTimer = REACTIVE_WINDOW_MS;
     ps.reactiveObs = obs; this.obstacles.markPending(obs, ps.idx);
   }
@@ -548,9 +643,9 @@ export class RunScene extends Phaser.Scene {
 
     slot.uses--;
     ps.boostUseCount[slot.id]++;
+    ps.boostPressTimer[slotIdx] = 0;
     this._refreshHudSlotP(ps, slotIdx);
 
-    // Burst at the obstacle; rock stays drawn for the other player
     const obsX = LANE_CENTERS[ps.reactiveObs.lane];
     spawnBurst(this, obsX, ps.reactiveObs.screenY, 0xFF6633, 16);
 
@@ -603,7 +698,6 @@ export class RunScene extends Phaser.Scene {
       h.sprintT.setText(ps.sprintTimer > 0 ? `SPRINT ${(ps.sprintTimer / 1000).toFixed(1)}s` : '');
     }
 
-    const leaderIdx = this.ps[0].trackPosition >= this.ps[1].trackPosition ? 0 : 1;
     this.gapText.setText(`GAP  ${Math.round(gap)}`);
     this.gapText.setColor(gap >= GAP_WARNING ? '#FF9900' : '#445566');
   }
@@ -656,7 +750,7 @@ export class RunScene extends Phaser.Scene {
   }
 
   _endP(ps, result) {
-    if (ps.gs !== 'RUNNING' && ps.gs !== 'REACTIVE') return; // guard double-call
+    if (ps.gs !== 'RUNNING' && ps.gs !== 'REACTIVE') return;
     ps.gs = result;
     const dist = Math.floor(ps.trackPosition);
     ps.reactiveOverlay.clear();
