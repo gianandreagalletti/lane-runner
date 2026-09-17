@@ -2,11 +2,15 @@ import Phaser from 'phaser';
 import { CANVAS_W, CANVAS_H, LANE_COLORS, OBS_COLORS } from './track.js';
 import { BOOSTS, BOOST_ORDER, BOOST_UNLOCK_LEVEL } from './boosts.js';
 import { loadProgress } from './progression.js';
+import { buildTwoPlayerPickers } from './PlanScene2P.js';
 
-// ── Left panel constants ──────────────────────────────────────────────────────
-const MAP_TOP    = 85;
-const MAP_BOTTOM = 618;
-const MAP_H      = MAP_BOTTOM - MAP_TOP;
+// ── Left panel constants (1P layout) ─────────────────────────────────────────
+const MAP_TOP_1P    = 85;
+const MAP_BOTTOM_1P = 618;
+
+// ── Compact map constants (2P layout) ────────────────────────────────────────
+const MAP_TOP_2P    = 60;
+const MAP_BOTTOM_2P = 300;
 
 const COL_W  = 138;
 const COL_GAP = 16;
@@ -15,7 +19,7 @@ const COL_X0  = 64;
 function colLeft(lane)   { return COL_X0 + lane * (COL_W + COL_GAP); }
 function colCenter(lane) { return colLeft(lane) + COL_W / 2; }
 
-// ── Right panel constants ─────────────────────────────────────────────────────
+// ── Right panel constants (1P) ─────────────────────────────────────────────
 const RP_CX   = 935;
 const CARD_W  = 182;
 const CARD_H  = 94;
@@ -31,8 +35,8 @@ export class PlanScene extends Phaser.Scene {
     this.trackData      = data.trackData;
     this.mode           = data.mode || '1p';
     this.selectedBoosts = new Set();
-    this.progress       = loadProgress();
-    this.planStart      = 0; // set in create() after Phaser is ready
+    this.progress       = loadProgress('p1');
+    this.planStart      = 0;
   }
 
   create() {
@@ -43,38 +47,64 @@ export class PlanScene extends Phaser.Scene {
       fontSize: '20px', fontFamily: 'monospace', color: '#7899AA'
     }).setOrigin(0.5, 0);
 
-    const div = this.add.graphics();
-    div.lineStyle(1, 0x223344, 1);
-    div.lineBetween(596, 8, 596, CANVAS_H - 8);
+    if (this.mode === '2p') {
+      this._drawMap(MAP_TOP_2P, MAP_BOTTOM_2P);
+      this._buildTwoPlayerUI();
+    } else {
+      const div = this.add.graphics();
+      div.lineStyle(1, 0x223344, 1);
+      div.lineBetween(596, 8, 596, CANVAS_H - 8);
+      this._drawMap(MAP_TOP_1P, MAP_BOTTOM_1P);
+      this._drawBoostPicker();
+      this._drawStartArea();
+      this.input.keyboard.on('keydown', e => {
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= 6) this._toggle(BOOST_ORDER[n - 1]);
+        if (e.key === 'Enter') this._tryStart();
+        if (e.key === 'Escape') this.scene.start('MenuScene', { mode: this.mode });
+      });
+    }
+  }
 
-    this._drawMap();
-    this._drawBoostPicker();
-    this._drawStartArea();
+  _buildTwoPlayerUI() {
+    const progressP1 = loadProgress('p1');
+    const progressP2 = loadProgress('p2');
 
-    this.input.keyboard.on('keydown', e => {
-      const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= 6) this._toggle(BOOST_ORDER[n - 1]);
-      if (e.key === 'Enter') this._tryStart();
-      if (e.key === 'Escape') this.scene.start('MenuScene', { mode: this.mode });
+    buildTwoPlayerPickers(this, {
+      progressP1,
+      progressP2,
+      onBothReady: (selectedP1, selectedP2) => {
+        this.scene.start('RunScene', {
+          mode:        '2p',
+          trackData:   this.trackData,
+          loadoutP1:   Array.from(selectedP1),
+          loadoutP2:   Array.from(selectedP2),
+          planningTimeMs: Date.now() - this.planStart
+        });
+      }
+    });
+
+    this.input.keyboard.on('keydown-ESC', () => {
+      this.scene.start('MenuScene', { mode: this.mode });
     });
   }
 
   // ── Track map ─────────────────────────────────────────────────────────────
 
-  _drawMap() {
-    const g  = this.add.graphics();
-    const sc = MAP_H / this.trackData.length;
+  _drawMap(mapTop, mapBottom) {
+    const mapH = mapBottom - mapTop;
+    const g    = this.add.graphics();
+    const sc   = mapH / this.trackData.length;
 
     for (let i = 0; i < 3; i++) {
       g.fillStyle(LANE_COLORS[i], 0.28);
-      g.fillRect(colLeft(i), MAP_TOP, COL_W, MAP_H);
+      g.fillRect(colLeft(i), mapTop, COL_W, mapH);
       g.lineStyle(1, 0xFFFFFF, 0.09);
-      g.strokeRect(colLeft(i), MAP_TOP, COL_W, MAP_H);
+      g.strokeRect(colLeft(i), mapTop, COL_W, mapH);
     }
 
-    // Distance ticks
     for (let d = 0; d <= this.trackData.length; d += 1000) {
-      const ty = MAP_TOP + d * sc;
+      const ty = mapTop + d * sc;
       g.lineStyle(1, 0x445566, 1);
       g.lineBetween(COL_X0 - 10, ty, COL_X0 - 2, ty);
       this.add.text(COL_X0 - 13, ty, `${d}`, {
@@ -84,28 +114,26 @@ export class PlanScene extends Phaser.Scene {
 
     const LABELS = ['LEFT', 'CENTER', 'RIGHT'];
     for (let i = 0; i < 3; i++) {
-      this.add.text(colCenter(i), MAP_TOP - 14, LABELS[i], {
+      this.add.text(colCenter(i), mapTop - 14, LABELS[i], {
         fontSize: '12px', fontFamily: 'monospace', color: '#8899AA'
       }).setOrigin(0.5, 1);
     }
 
     const BW = COL_W - 16, BH = 12;
-    // Label letters + shape glyph so colorblind players can read the map
     const TYPE_LABEL = { rock: 'R ✕', ice: 'I +', water: 'W ~' };
     const LABEL_COL  = { rock: '#FFB8B0', ice: '#C8F0FF', water: '#C8FFFF' };
     for (const obs of this.trackData.obstacles) {
-      const ty  = MAP_TOP + obs.distance * sc;
+      const ty  = mapTop + obs.distance * sc;
       const lx  = colLeft(obs.lane) + 8;
       g.fillStyle(OBS_COLORS[obs.type]);
       g.fillRect(lx, ty - BH / 2, BW, BH);
-      // Short type label centered on block
       this.add.text(lx + BW / 2, ty, TYPE_LABEL[obs.type], {
         fontSize: '8px', fontFamily: 'monospace', color: LABEL_COL[obs.type]
       }).setOrigin(0.5, 0.5);
     }
 
     const counts = this._countObs();
-    const SY = MAP_BOTTOM + 14;
+    const SY = mapBottom + 14;
     for (let i = 0; i < 3; i++) {
       const c = counts[i];
       const parts = [];
@@ -124,7 +152,7 @@ export class PlanScene extends Phaser.Scene {
     return c;
   }
 
-  // ── Boost picker ──────────────────────────────────────────────────────────
+  // ── Boost picker (1P only) ────────────────────────────────────────────────
 
   _drawBoostPicker() {
     this.add.text(RP_CX, 42, 'SELECT LOADOUT', {
@@ -171,15 +199,13 @@ export class PlanScene extends Phaser.Scene {
         bg.on('pointerdown', () => this._toggle(id));
       }
 
-      // Number badge
       this.add.text(CARD_COL[col] + 10, CARD_ROW[row] + 8, `${idx + 1}`, {
         fontSize: '11px', fontFamily: 'monospace',
         color: locked ? '#333338' : '#334455'
       });
 
       const typeLabel = isPass ? '● passive' : '◆ active';
-      const typeColor = locked ? '#2a2a30'
-        : (isPass ? '#3366AA' : '#885533');
+      const typeColor = locked ? '#2a2a30' : (isPass ? '#3366AA' : '#885533');
       this.add.text(cx, cy - 28, typeLabel, {
         fontSize: '11px', fontFamily: 'monospace', color: typeColor
       }).setOrigin(0.5);
@@ -189,7 +215,7 @@ export class PlanScene extends Phaser.Scene {
         fontSize: '17px', fontFamily: 'monospace', color: nameColor
       }).setOrigin(0.5);
 
-      const descText = locked ? `Unlocks at level ${reqLevel}` : boost.desc;
+      const descText  = locked ? `Unlocks at level ${reqLevel}` : boost.desc;
       const descColor = locked ? '#282832' : '#556677';
       const descT = this.add.text(cx, cy + 20, descText, {
         fontSize: '12px', fontFamily: 'monospace', color: descColor
@@ -228,7 +254,7 @@ export class PlanScene extends Phaser.Scene {
     }
   }
 
-  // ── Start area ────────────────────────────────────────────────────────────
+  // ── Start area (1P) ───────────────────────────────────────────────────────
 
   _drawStartArea() {
     const sy = CARD_ROW[1] + CARD_H + 28;

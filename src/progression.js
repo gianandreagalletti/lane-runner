@@ -1,4 +1,5 @@
-const SAVE_KEY = 'laneRunner.save';
+// Per-slot save keys — 1P always uses 'p1', 2P uses 'p1' and 'p2'.
+function saveKey(slot) { return `laneRunner.save.${slot}`; }
 
 // Boosts unlocked at level-up, in order (level 2 → sprint, 3 → phase, 4 → quick_step)
 const LEVELUP_UNLOCKS = ['sprint', 'phase', 'quick_step'];
@@ -11,12 +12,11 @@ function defaultSave() {
   };
 }
 
-export function loadProgress() {
+export function loadProgress(slot = 'p1') {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(saveKey(slot));
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Basic sanity check
       if (typeof parsed.level === 'number' && Array.isArray(parsed.unlockedBoosts)) {
         return parsed;
       }
@@ -25,17 +25,16 @@ export function loadProgress() {
   return defaultSave();
 }
 
-export function resetProgress() {
-  localStorage.removeItem(SAVE_KEY);
+export function resetProgress(slot = 'p1') {
+  localStorage.removeItem(saveKey(slot));
   return defaultSave();
 }
 
-function saveProgress(state) {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+function saveProgress(state, slot) {
+  localStorage.setItem(saveKey(slot), JSON.stringify(state));
 }
 
 // XP threshold to REACH level N (N >= 2)
-// Level N requires 100 * N cumulative XP.
 function xpThreshold(level) {
   return 100 * level;
 }
@@ -44,7 +43,7 @@ function xpThreshold(level) {
  * Award XP for a run, handle level-ups, persist.
  * Returns { gained, levelsGained: [{level, unlocked}] }
  */
-export function awardXP(state, distance, completed) {
+export function awardXP(state, distance, completed, slot = 'p1') {
   const gained = Math.floor(distance / 10) + (completed ? 50 : 0);
   state.totalXP += gained;
 
@@ -54,8 +53,7 @@ export function awardXP(state, distance, completed) {
     keepChecking = false;
     if (state.totalXP >= xpThreshold(state.level + 1)) {
       state.level++;
-      // Unlock the corresponding boost if any
-      const unlockIdx = state.level - 2; // level 2 → idx 0 = sprint
+      const unlockIdx = state.level - 2;
       const toUnlock  = LEVELUP_UNLOCKS[unlockIdx] ?? null;
       if (toUnlock && !state.unlockedBoosts.includes(toUnlock)) {
         state.unlockedBoosts.push(toUnlock);
@@ -65,7 +63,7 @@ export function awardXP(state, distance, completed) {
     }
   }
 
-  saveProgress(state);
+  saveProgress(state, slot);
   return { gained, levelsGained };
 }
 

@@ -60,7 +60,7 @@ export class ResultScene extends Phaser.Scene {
       }).setOrigin(0.5);
     });
 
-    this._drawXpSection(isWin, this.distance, 360);
+    this._drawXpSection(isWin, this.distance, 360, 'p1');
 
     this._btn(CANVAS_W / 2 - 170, 580, '[R] Retry plan', () => {
       this.scene.start('PlanScene', { trackData: this.trackData, mode: '1p' });
@@ -107,11 +107,9 @@ export class ResultScene extends Phaser.Scene {
     dg.lineStyle(1, 0x1a2a3a, 1);
     dg.lineBetween(CANVAS_W / 2, 120, CANVAS_W / 2, 490);
 
-    // XP based on best-performing player
-    const best = winnerIdx >= 0
-      ? this.players[winnerIdx]
-      : (p1.distance >= p2.distance ? p1 : p2);
-    this._drawXpSection(best.result === 'COMPLETE', best.distance, 490);
+    // Award XP per player separately (drawn compact, side by side)
+    this._drawXpSection2P(p1.result === 'COMPLETE', p1.distance, 'p1', 300);
+    this._drawXpSection2P(p2.result === 'COMPLETE', p2.distance, 'p2', 980);
 
     const cx = CANVAS_W / 2;
     this._btn(cx - 170, 626, '[R] Retry plan', () => {
@@ -173,9 +171,38 @@ export class ResultScene extends Phaser.Scene {
 
   // ─── SHARED HELPERS ───────────────────────────────────────────────────────
 
-  _drawXpSection(isWin, distance, y) {
-    const state = loadProgress();
-    const { gained, levelsGained } = awardXP(state, distance, isWin);
+  // Compact XP row for 2P result (drawn under each player's panel column)
+  _drawXpSection2P(isWin, distance, slot, cx) {
+    const y = 480;
+    const state = loadProgress(slot);
+    const { gained, levelsGained } = awardXP(state, distance, isWin, slot);
+
+    const xpPop = this.add.text(cx, y + 30, `+${gained} XP`, {
+      fontSize: '24px', fontFamily: 'monospace', color: '#FFE044',
+      stroke: '#000000', strokeThickness: 3
+    }).setOrigin(0.5).setAlpha(0);
+
+    this.tweens.add({ targets: xpPop, y, alpha: 1, duration: 450, ease: 'Back.easeOut', delay: 200 });
+
+    let oy = y + 28;
+    for (const lv of levelsGained) {
+      const msg = lv.unlocked
+        ? `LVL ${state.level}  +${BOOSTS[lv.unlocked].name}`
+        : `LEVEL UP → ${state.level}`;
+      this.add.text(cx, oy, msg, {
+        fontSize: '13px', fontFamily: 'monospace', color: '#88FF88'
+      }).setOrigin(0.5);
+      oy += 20;
+    }
+
+    this.add.text(cx, oy + 8, `Level ${state.level}  ·  ${xpToNext(state)} to next`, {
+      fontSize: '11px', fontFamily: 'monospace', color: '#445566'
+    }).setOrigin(0.5);
+  }
+
+  _drawXpSection(isWin, distance, y, slot = 'p1') {
+    const state = loadProgress(slot);
+    const { gained, levelsGained } = awardXP(state, distance, isWin, slot);
 
     const xpPop = this.add.text(CANVAS_W / 2, y + 40, `+${gained} XP`, {
       fontSize: '32px', fontFamily: 'monospace', color: '#FFE044',

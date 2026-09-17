@@ -11,7 +11,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create() {
-    this.progress = loadProgress();
+    this.progress = loadProgress('p1');
 
     // Background
     const g = this.add.graphics();
@@ -46,16 +46,26 @@ export class MenuScene extends Phaser.Scene {
       this._trackBtn(CANVAS_W / 2, 338 + i * 90, track, trackDescs[i], i + 1);
     });
 
-    // Bottom bar: Reset | Controls | Export
-    const resetBg = this.add.rectangle(108, CANVAS_H - 34, 188, 30, 0x160808)
+    // Bottom bar: Reset P1 | Reset P2 | Controls | Export
+    const resetP1Bg = this.add.rectangle(60, CANVAS_H - 34, 100, 30, 0x160808)
       .setInteractive({ useHandCursor: true })
       .setStrokeStyle(1, 0x442222);
-    this.add.text(108, CANVAS_H - 34, 'RESET PROGRESS', {
-      fontSize: '12px', fontFamily: 'monospace', color: '#664444'
+    this.add.text(60, CANVAS_H - 34, 'RESET P1', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#664444'
     }).setOrigin(0.5);
-    resetBg.on('pointerover', () => resetBg.setFillStyle(0x250c0c));
-    resetBg.on('pointerout',  () => resetBg.setFillStyle(0x160808));
-    resetBg.on('pointerdown', () => { resetProgress(); this.scene.restart({ mode: this.mode }); });
+    resetP1Bg.on('pointerover', () => resetP1Bg.setFillStyle(0x250c0c));
+    resetP1Bg.on('pointerout',  () => resetP1Bg.setFillStyle(0x160808));
+    resetP1Bg.on('pointerdown', () => { resetProgress('p1'); this.scene.restart({ mode: this.mode }); });
+
+    const resetP2Bg = this.add.rectangle(168, CANVAS_H - 34, 100, 30, 0x160808)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x442222);
+    this.add.text(168, CANVAS_H - 34, 'RESET P2', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#664444'
+    }).setOrigin(0.5);
+    resetP2Bg.on('pointerover', () => resetP2Bg.setFillStyle(0x250c0c));
+    resetP2Bg.on('pointerout',  () => resetP2Bg.setFillStyle(0x160808));
+    resetP2Bg.on('pointerdown', () => { resetProgress('p2'); this.scene.restart({ mode: this.mode }); });
 
     const ctrlBg = this.add.rectangle(CANVAS_W / 2, CANVAS_H - 34, 160, 30, 0x0d1520)
       .setInteractive({ useHandCursor: true })
