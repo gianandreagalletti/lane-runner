@@ -6,21 +6,69 @@ import { CENTI_SCALE, LANE_SWITCH_TICKS, PICKUP_TYPES } from './rules.js';
 // BENCHED: phase — was Slot 2, removed from canonical slots
 const CANONICAL_SLOTS = ['rock_break', 'sprint', 'caltrop', 'snipe_shot'];
 
-// Verify no band has rocks in all 3 lanes (hard constraint)
-function _assertNoAllRockBands(trackData) {
-  // Group obstacles by distance band
-  const bands = {};
-  for (const obs of trackData.obstacles) {
-    const key = obs.distance;
-    if (!bands[key]) bands[key] = [];
-    bands[key].push(obs);
+// Verify all track band invariants (5 rules)
+function assertTrackValid(trackData) {
+  const td = trackData;
+
+  // Group obstacles by distance (exact match — each band uses one distance value)
+  const bandMap = new Map();
+  for (const obs of td.obstacles) {
+    const bandKey = Math.round(obs.distance / 10) * 10; // round to nearest 10
+    if (!bandMap.has(bandKey)) bandMap.set(bandKey, []);
+    bandMap.get(bandKey).push(obs);
   }
-  for (const [dist, obs] of Object.entries(bands)) {
-    const rockLanes = new Set(obs.filter(o => o.type === 'rock').map(o => o.lane));
-    if (rockLanes.has(0) && rockLanes.has(1) && rockLanes.has(2)) {
+
+  for (const [dist, obs] of bandMap) {
+    const rocks = obs.filter(o => o.type === 'rock');
+
+    // Rule 1: no 3 rocks in same band (original constraint, kept for clarity)
+    const rockLanes = new Set(rocks.map(o => o.lane));
+    if (rockLanes.size === 3) {
+      throw new Error(`Track ${td.id}: band at ${dist} has rocks in all 3 lanes`);
+    }
+
+    // Rule 2: rocks only in gate bands (must be exactly 2 rocks if any rocks present)
+    if (rocks.length > 0 && rocks.length !== 2) {
       throw new Error(
-        `Track "${trackData.id}" has rocks in ALL 3 lanes at distance ${dist}. ` +
-        `This violates the hard constraint: no band may have rocks in all 3 lanes.`
+        `Track ${td.id}: band at ${dist} has ${rocks.length} rock(s) — must be exactly 2 (gate band) or 0`
+      );
+    }
+    // Rule 3: gate must have a non-rock obstacle (the passable-lane hazard)
+    if (rocks.length === 2) {
+      const nonRock = obs.filter(o => o.type !== 'rock');
+      if (nonRock.length === 0) {
+        throw new Error(`Track ${td.id}: gate band at ${dist} has no non-rock obstacle`);
+      }
+    }
+  }
+
+  // Rule 4: consecutive gates >= 800 units apart
+  const gateBands = [...bandMap.entries()]
+    .filter(([, obs]) => obs.some(o => o.type === 'rock'))
+    .map(([dist]) => dist)
+    .sort((a, b) => a - b);
+
+  for (let i = 1; i < gateBands.length; i++) {
+    if (gateBands[i] - gateBands[i - 1] < 800) {
+      throw new Error(
+        `Track ${td.id}: gates at ${gateBands[i - 1]} and ${gateBands[i]} are only ` +
+        `${gateBands[i] - gateBands[i - 1]} units apart (min 800)`
+      );
+    }
+  }
+
+  // Rule 5: open lanes differ by at most 1 between consecutive gates
+  for (let i = 1; i < gateBands.length; i++) {
+    const prev = bandMap.get(gateBands[i - 1]);
+    const curr = bandMap.get(gateBands[i]);
+    const prevRockLanes = new Set(prev.filter(o => o.type === 'rock').map(o => o.lane));
+    const currRockLanes = new Set(curr.filter(o => o.type === 'rock').map(o => o.lane));
+    const prevOpen = [0, 1, 2].find(l => !prevRockLanes.has(l));
+    const currOpen = [0, 1, 2].find(l => !currRockLanes.has(l));
+    if (Math.abs(currOpen - prevOpen) > 1) {
+      throw new Error(
+        `Track ${td.id}: gates at ${gateBands[i - 1]} (open:${prevOpen}) and ` +
+        `${gateBands[i]} (open:${currOpen}) require a 2-lane jump`
       );
     }
   }
@@ -35,8 +83,8 @@ function _getQuickStepTicks(loadout) {
 }
 
 export function createInitialState(matchConfig, trackData) {
-  // Validate track: no all-rock bands
-  _assertNoAllRockBands(trackData);
+  // Validate track: enforce all 5 band rules
+  assertTrackValid(trackData);
 
   const numPlayers = matchConfig.players.length;
   const obstacles = trackData.obstacles.map(o => ({
