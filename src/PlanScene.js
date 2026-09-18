@@ -119,6 +119,11 @@ export class PlanScene extends Phaser.Scene {
     const MAP_COLORS = { rock: 0x2A2E34, ice: 0xB8D8E8, water: 0x3AA8C4 };
     const TYPE_LABEL = { rock: '▓ RAIL', ice: '~ ICE', water: '≈ WTR' };
     const LABEL_COL  = { rock: '#F2C230', ice: '#C8F0FF', water: '#AAEEFF' };
+
+    // Build gate band set for visual distinction
+    const gateDists = this._getGateDists();
+
+    // Draw obstacles and gate band indicators
     for (const obs of this.trackData.obstacles) {
       const ty  = mapTop + obs.distance * sc;
       const lx  = colLeft(obs.lane) + 8;
@@ -134,16 +139,32 @@ export class PlanScene extends Phaser.Scene {
       }).setOrigin(0.5, 0.5);
     }
 
+    // Draw gate band markers: gold left-edge border + GATE label + open lane indicator
+    for (const [dist, openLane] of gateDists) {
+      const ty = mapTop + dist * sc;
+      // Gold left border spanning all 3 columns
+      g.lineStyle(2, 0xF2C230, 0.9);
+      g.lineBetween(COL_X0, ty - BH / 2 - 1, COL_X0, ty + BH / 2 + 1);
+      g.lineBetween(COL_X0 + 3 * (COL_W + COL_GAP) - COL_GAP, ty - BH / 2 - 1,
+                    COL_X0 + 3 * (COL_W + COL_GAP) - COL_GAP, ty + BH / 2 + 1);
+      // GATE label to the right of the columns
+      this.add.text(COL_X0 + 3 * (COL_W + COL_GAP) - COL_GAP + 4, ty,
+        `GATE\nL${openLane}`, {
+        fontSize: '7px', fontFamily: 'monospace', color: '#F2C230', lineSpacing: -2
+      }).setOrigin(0, 0.5);
+    }
+
+    // Per-lane hazard summary at bottom: ice vs water count
     const counts = this._countObs();
     const SY = mapBottom + 14;
     for (let i = 0; i < 3; i++) {
       const c = counts[i];
       const parts = [];
-      if (c.rock  > 0) parts.push(`${c.rock} rail`);
-      if (c.ice   > 0) parts.push(`${c.ice} ice`);
-      if (c.water > 0) parts.push(`${c.water} water`);
+      if (c.ice   > 0) parts.push(`${c.ice}×ice`);
+      if (c.water > 0) parts.push(`${c.water}×wtr`);
+      if (c.rock  > 0) parts.push(`${c.rock}×rail`);
       this.add.text(colCenter(i), SY, parts.join('  ') || 'clear', {
-        fontSize: '11px', fontFamily: 'monospace', color: '#667788'
+        fontSize: '10px', fontFamily: 'monospace', color: '#667788'
       }).setOrigin(0.5, 0);
     }
   }
@@ -152,6 +173,25 @@ export class PlanScene extends Phaser.Scene {
     const c = [{rock:0,ice:0,water:0},{rock:0,ice:0,water:0},{rock:0,ice:0,water:0}];
     for (const o of this.trackData.obstacles) c[o.lane][o.type]++;
     return c;
+  }
+
+  // Returns Map<distance, openLane> for gate bands (those with exactly 2 rocks)
+  _getGateDists() {
+    const bandMap = new Map();
+    for (const obs of this.trackData.obstacles) {
+      if (!bandMap.has(obs.distance)) bandMap.set(obs.distance, []);
+      bandMap.get(obs.distance).push(obs);
+    }
+    const result = new Map();
+    for (const [dist, obs] of bandMap) {
+      const rocks = obs.filter(o => o.type === 'rock');
+      if (rocks.length === 2) {
+        const rockLanes = new Set(rocks.map(o => o.lane));
+        const openLane = [0, 1, 2].find(l => !rockLanes.has(l));
+        result.set(dist, openLane);
+      }
+    }
+    return result;
   }
 
   _drawShop() {
