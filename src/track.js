@@ -32,410 +32,665 @@ export const OBS_COLORS = {
 };
 
 // ─── Track 1 ─────────────────────────────────────────────────────────────────
-// 12 000 units, 28 bands, 54 obstacles.
-// Approachable: rewards ice_grip + water_shield, rock_break handles lethal rocks.
-// No band has rocks in all 3 lanes.
+// 10 200 units, 35 bands (~29% gate, ~57% damage, ~14% relief).
+// Ice-heavy. Rewards ice_grip. Level 1 loadout completable.
+// 10 gates, open lanes: 1→0→1→2→1→0→1→2→1→0 (all shifts ≤1).
+// Gates at: 500,1500,2500,3550,4600,5650,6700,7750,8800,9700
+// Gaps: 1000,1000,1050,1050,1050,1050,1050,1050,900 — all ≥ 800.
 export const TRACK_1 = {
   id:     'track_1',
   name:   'Track 1',
-  length: 12000,
+  length: 10200,
   obstacles: [
-    // Band 1 @ 400: rock L0, ice L1 — L2 clear
-    { lane: 0, distance:  400, type: 'rock' },
-    { lane: 1, distance:  400, type: 'ice'  },
+    // ── Seg 0: pre-gate bands ──────────────────────────────────────────────
+    // Band 1 @ 240: damage — ice L0, ice L1, water L2
+    { lane: 0, distance:  240, type: 'ice'   },
+    { lane: 1, distance:  240, type: 'ice'   },
+    { lane: 2, distance:  240, type: 'water' },
 
-    // Band 2 @ 850: water L0, rock L2 — L1 clear
-    { lane: 0, distance:  850, type: 'water' },
-    { lane: 2, distance:  850, type: 'rock'  },
+    // Band 2 @ 400: relief — ice L0, ice L2 — L1 clear
+    { lane: 0, distance:  400, type: 'ice' },
+    { lane: 2, distance:  400, type: 'ice' },
 
-    // Band 3 @ 1300: rock L1, ice L2 — L0 clear
-    { lane: 1, distance: 1300, type: 'rock' },
-    { lane: 2, distance: 1300, type: 'ice'  },
+    // ── Gate 1 @ 500: open=1 (rock L0, rock L2, ice L1) ───────────────────
+    { lane: 0, distance:  500, type: 'rock' },
+    { lane: 2, distance:  500, type: 'rock' },
+    { lane: 1, distance:  500, type: 'ice'  },
 
-    // Band 4 @ 1750: ice L0, water L1 — L2 clear
-    { lane: 0, distance: 1750, type: 'ice'   },
-    { lane: 1, distance: 1750, type: 'water' },
+    // ── Seg 1→2: 500→1500 ─────────────────────────────────────────────────
+    // Band 4 @ 700: damage — ice L0, ice L1, ice L2
+    { lane: 0, distance:  700, type: 'ice' },
+    { lane: 1, distance:  700, type: 'ice' },
+    { lane: 2, distance:  700, type: 'ice' },
 
-    // Band 5 @ 2200: rock L0, rock L2 — L1 clear (double rock, no ice/water)
-    { lane: 0, distance: 2200, type: 'rock' },
-    { lane: 2, distance: 2200, type: 'rock' },
+    // Band 5 @ 950: damage — water L0, ice L1, ice L2
+    { lane: 0, distance:  950, type: 'water' },
+    { lane: 1, distance:  950, type: 'ice'   },
+    { lane: 2, distance:  950, type: 'ice'   },
 
-    // Band 6 @ 2650: water L1, rock L2 — L0 clear
-    { lane: 1, distance: 2650, type: 'water' },
-    { lane: 2, distance: 2650, type: 'rock'  },
+    // Band 6 @ 1200: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 1200, type: 'ice'   },
+    { lane: 1, distance: 1200, type: 'ice'   },
+    { lane: 2, distance: 1200, type: 'water' },
 
-    // Band 7 @ 3100: ice L0, rock L1, water L2 — all blocked (ice or water debuff forced)
-    { lane: 0, distance: 3100, type: 'ice'   },
-    { lane: 1, distance: 3100, type: 'rock'  },
-    { lane: 2, distance: 3100, type: 'water' },
+    // ── Gate 2 @ 1500: open=0 (rock L1, rock L2, water L0) ────────────────
+    { lane: 1, distance: 1500, type: 'rock'  },
+    { lane: 2, distance: 1500, type: 'rock'  },
+    { lane: 0, distance: 1500, type: 'water' },
 
-    // Band 8 @ 3600: rock L0, ice L2 — L1 clear
-    { lane: 0, distance: 3600, type: 'rock' },
-    { lane: 2, distance: 3600, type: 'ice'  },
+    // ── Seg 2→3: 1500→2500 ────────────────────────────────────────────────
+    // Band 8 @ 1700: damage — ice L0, ice L1, ice L2
+    { lane: 0, distance: 1700, type: 'ice' },
+    { lane: 1, distance: 1700, type: 'ice' },
+    { lane: 2, distance: 1700, type: 'ice' },
 
-    // Band 9 @ 4050: water L0, ice L1 — L2 clear
-    { lane: 0, distance: 4050, type: 'water' },
-    { lane: 1, distance: 4050, type: 'ice'   },
+    // Band 9 @ 1950: relief — water L0, ice L2 — L1 clear
+    { lane: 0, distance: 1950, type: 'water' },
+    { lane: 2, distance: 1950, type: 'ice'   },
 
-    // Band 10 @ 4500: rock L1, water L2 — L0 clear
-    { lane: 1, distance: 4500, type: 'rock'  },
-    { lane: 2, distance: 4500, type: 'water' },
+    // Band 10 @ 2220: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 2220, type: 'ice'   },
+    { lane: 1, distance: 2220, type: 'ice'   },
+    { lane: 2, distance: 2220, type: 'water' },
 
-    // Band 11 @ 4950: ice L0, rock L2 — L1 clear
-    { lane: 0, distance: 4950, type: 'ice'  },
-    { lane: 2, distance: 4950, type: 'rock' },
+    // ── Gate 3 @ 2500: open=1 (rock L0, rock L2, ice L1) ──────────────────
+    { lane: 0, distance: 2500, type: 'rock' },
+    { lane: 2, distance: 2500, type: 'rock' },
+    { lane: 1, distance: 2500, type: 'ice'  },
 
-    // Band 12 @ 5400: rock L0, ice L1, water L2 — all blocked (rock forces react or switch)
-    { lane: 0, distance: 5400, type: 'rock'  },
+    // ── Seg 3→4: 2500→3550 ────────────────────────────────────────────────
+    // Band 12 @ 2760: damage — water L0, ice L1, ice L2
+    { lane: 0, distance: 2760, type: 'water' },
+    { lane: 1, distance: 2760, type: 'ice'   },
+    { lane: 2, distance: 2760, type: 'ice'   },
+
+    // Band 13 @ 3060: damage — ice L0, ice L1, ice L2
+    { lane: 0, distance: 3060, type: 'ice' },
+    { lane: 1, distance: 3060, type: 'ice' },
+    { lane: 2, distance: 3060, type: 'ice' },
+
+    // Band 14 @ 3300: relief — ice L0, water L1 — L2 clear
+    { lane: 0, distance: 3300, type: 'ice'   },
+    { lane: 1, distance: 3300, type: 'water' },
+
+    // ── Gate 4 @ 3550: open=2 (rock L0, rock L1, ice L2) ──────────────────
+    { lane: 0, distance: 3550, type: 'rock' },
+    { lane: 1, distance: 3550, type: 'rock' },
+    { lane: 2, distance: 3550, type: 'ice'  },
+
+    // ── Seg 4→5: 3550→4600 ────────────────────────────────────────────────
+    // Band 16 @ 3800: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 3800, type: 'ice'   },
+    { lane: 1, distance: 3800, type: 'ice'   },
+    { lane: 2, distance: 3800, type: 'water' },
+
+    // Band 17 @ 4100: damage — ice L0, water L1, ice L2
+    { lane: 0, distance: 4100, type: 'ice'   },
+    { lane: 1, distance: 4100, type: 'water' },
+    { lane: 2, distance: 4100, type: 'ice'   },
+
+    // Band 18 @ 4350: relief — water L0, ice L2 — L1 clear
+    { lane: 0, distance: 4350, type: 'water' },
+    { lane: 2, distance: 4350, type: 'ice'   },
+
+    // ── Gate 5 @ 4600: open=1 (rock L0, rock L2, water L1) ────────────────
+    { lane: 0, distance: 4600, type: 'rock'  },
+    { lane: 2, distance: 4600, type: 'rock'  },
+    { lane: 1, distance: 4600, type: 'water' },
+
+    // ── Seg 5→6: 4600→5650 ────────────────────────────────────────────────
+    // Band 20 @ 4870: damage — ice L0, ice L1, ice L2
+    { lane: 0, distance: 4870, type: 'ice' },
+    { lane: 1, distance: 4870, type: 'ice' },
+    { lane: 2, distance: 4870, type: 'ice' },
+
+    // Band 21 @ 5150: damage — water L0, ice L1, ice L2
+    { lane: 0, distance: 5150, type: 'water' },
+    { lane: 1, distance: 5150, type: 'ice'   },
+    { lane: 2, distance: 5150, type: 'ice'   },
+
+    // Band 22 @ 5400: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 5400, type: 'ice'   },
     { lane: 1, distance: 5400, type: 'ice'   },
     { lane: 2, distance: 5400, type: 'water' },
 
-    // Band 13 @ 5900: water L0, rock L1 — L2 clear
-    { lane: 0, distance: 5900, type: 'water' },
-    { lane: 1, distance: 5900, type: 'rock'  },
+    // ── Gate 6 @ 5650: open=0 (rock L1, rock L2, ice L0) ──────────────────
+    { lane: 1, distance: 5650, type: 'rock' },
+    { lane: 2, distance: 5650, type: 'rock' },
+    { lane: 0, distance: 5650, type: 'ice'  },
 
-    // Band 14 @ 6350: rock L0, water L2 — L1 clear
-    { lane: 0, distance: 6350, type: 'rock'  },
-    { lane: 2, distance: 6350, type: 'water' },
+    // ── Seg 6→7: 5650→6700 ────────────────────────────────────────────────
+    // Band 24 @ 5900: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 5900, type: 'ice'   },
+    { lane: 1, distance: 5900, type: 'ice'   },
+    { lane: 2, distance: 5900, type: 'water' },
 
-    // Band 15 @ 6800: ice L1, rock L2 — L0 clear
-    { lane: 1, distance: 6800, type: 'ice'  },
-    { lane: 2, distance: 6800, type: 'rock' },
+    // Band 25 @ 6150: relief — ice L0, water L2 — L1 clear
+    { lane: 0, distance: 6150, type: 'ice'   },
+    { lane: 2, distance: 6150, type: 'water' },
 
-    // Band 16 @ 7250: rock L0, ice L2 — L1 clear
-    { lane: 0, distance: 7250, type: 'rock' },
-    { lane: 2, distance: 7250, type: 'ice'  },
+    // Band 26 @ 6450: damage — ice L0, ice L1, ice L2
+    { lane: 0, distance: 6450, type: 'ice' },
+    { lane: 1, distance: 6450, type: 'ice' },
+    { lane: 2, distance: 6450, type: 'ice' },
 
-    // Band 17 @ 7700: water L0, ice L1, rock L2 — all blocked (water or ice debuff)
-    { lane: 0, distance: 7700, type: 'water' },
-    { lane: 1, distance: 7700, type: 'ice'   },
-    { lane: 2, distance: 7700, type: 'rock'  },
+    // ── Gate 7 @ 6700: open=1 (rock L0, rock L2, ice L1) ──────────────────
+    { lane: 0, distance: 6700, type: 'rock' },
+    { lane: 2, distance: 6700, type: 'rock' },
+    { lane: 1, distance: 6700, type: 'ice'  },
 
-    // Band 18 @ 8150: rock L1, water L2 — L0 clear
-    { lane: 1, distance: 8150, type: 'rock'  },
-    { lane: 2, distance: 8150, type: 'water' },
+    // ── Seg 7→8: 6700→7750 ────────────────────────────────────────────────
+    // Band 28 @ 6970: damage — ice L0, water L1, ice L2
+    { lane: 0, distance: 6970, type: 'ice'   },
+    { lane: 1, distance: 6970, type: 'water' },
+    { lane: 2, distance: 6970, type: 'ice'   },
 
-    // Band 19 @ 8600: ice L0, rock L1 — L2 clear
-    { lane: 0, distance: 8600, type: 'ice'  },
-    { lane: 1, distance: 8600, type: 'rock' },
+    // Band 29 @ 7250: damage — water L0, ice L1, ice L2
+    { lane: 0, distance: 7250, type: 'water' },
+    { lane: 1, distance: 7250, type: 'ice'   },
+    { lane: 2, distance: 7250, type: 'ice'   },
 
-    // Band 20 @ 9050: rock L0, water L1, ice L2 — all blocked
-    { lane: 0, distance: 9050, type: 'rock'  },
-    { lane: 1, distance: 9050, type: 'water' },
-    { lane: 2, distance: 9050, type: 'ice'   },
+    // Band 30 @ 7500: relief — ice L0, ice L1 — L2 clear
+    { lane: 0, distance: 7500, type: 'ice' },
+    { lane: 1, distance: 7500, type: 'ice' },
 
-    // Band 21 @ 9500: water L0, rock L2 — L1 clear
-    { lane: 0, distance: 9500, type: 'water' },
-    { lane: 2, distance: 9500, type: 'rock'  },
+    // ── Gate 8 @ 7750: open=2 (rock L0, rock L1, ice L2) ──────────────────
+    { lane: 0, distance: 7750, type: 'rock' },
+    { lane: 1, distance: 7750, type: 'rock' },
+    { lane: 2, distance: 7750, type: 'ice'  },
 
-    // Band 22 @ 9950: rock L0, ice L1 — L2 clear
-    { lane: 0, distance: 9950, type: 'rock' },
-    { lane: 1, distance: 9950, type: 'ice'  },
+    // ── Seg 8→9: 7750→8800 ────────────────────────────────────────────────
+    // Band 32 @ 8020: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 8020, type: 'ice'   },
+    { lane: 1, distance: 8020, type: 'ice'   },
+    { lane: 2, distance: 8020, type: 'water' },
 
-    // Band 23 @ 10400: ice L0, water L2 — L1 clear
-    { lane: 0, distance: 10400, type: 'ice'   },
-    { lane: 2, distance: 10400, type: 'water' },
+    // Band 33 @ 8300: damage — water L0, ice L1, ice L2
+    { lane: 0, distance: 8300, type: 'water' },
+    { lane: 1, distance: 8300, type: 'ice'   },
+    { lane: 2, distance: 8300, type: 'ice'   },
 
-    // Band 24 @ 10850: rock L1, water L2 — L0 clear
-    { lane: 1, distance: 10850, type: 'rock'  },
-    { lane: 2, distance: 10850, type: 'water' },
+    // Band 34 @ 8560: relief — water L0, ice L2 — L1 clear
+    { lane: 0, distance: 8560, type: 'water' },
+    { lane: 2, distance: 8560, type: 'ice'   },
 
-    // Band 25 @ 11300: ice L0, rock L2 — L1 clear
-    { lane: 0, distance: 11300, type: 'ice'  },
-    { lane: 2, distance: 11300, type: 'rock' },
+    // ── Gate 9 @ 8800: open=1 (rock L0, rock L2, water L1) ────────────────
+    { lane: 0, distance: 8800, type: 'rock'  },
+    { lane: 2, distance: 8800, type: 'rock'  },
+    { lane: 1, distance: 8800, type: 'water' },
 
-    // Band 26 @ 11700: rock L0, ice L1, water L2 — all blocked (finale gauntlet)
-    { lane: 0, distance: 11700, type: 'rock'  },
-    { lane: 1, distance: 11700, type: 'ice'   },
-    { lane: 2, distance: 11700, type: 'water' }
+    // ── Seg 9→10: 8800→9700 ───────────────────────────────────────────────
+    // Band 36 @ 9030: damage — ice L0, ice L1, ice L2
+    { lane: 0, distance: 9030, type: 'ice' },
+    { lane: 1, distance: 9030, type: 'ice' },
+    { lane: 2, distance: 9030, type: 'ice' },
+
+    // Band 37 @ 9320: damage — ice L0, water L1, ice L2
+    { lane: 0, distance: 9320, type: 'ice'   },
+    { lane: 1, distance: 9320, type: 'water' },
+    { lane: 2, distance: 9320, type: 'ice'   },
+
+    // Band 38 @ 9540: relief — ice L1, water L2 — L0 clear
+    { lane: 1, distance: 9540, type: 'ice'   },
+    { lane: 2, distance: 9540, type: 'water' },
+
+    // ── Gate 10 @ 9700: open=0 (rock L1, rock L2, ice L0) — finale ─────────
+    { lane: 1, distance: 9700, type: 'rock' },
+    { lane: 2, distance: 9700, type: 'rock' },
+    { lane: 0, distance: 9700, type: 'ice'  },
+
+    // ── Post-finale ────────────────────────────────────────────────────────
+    // Band 40 @ 9950: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 9950, type: 'ice'   },
+    { lane: 1, distance: 9950, type: 'ice'   },
+    { lane: 2, distance: 9950, type: 'water' }
   ],
   pickups: [
-    // ~6 caltrop + ~6 snipe pickups, spread through run, never in only-clear lane of obstacle band
-    { lane: 2, distance:  600, type: 'caltrop_pickup'  },  // after band 1 (L0 rock, L1 ice → L2 clear, no band here)
-    { lane: 1, distance: 1100, type: 'snipe_pickup'    },  // between bands 2 & 3
-    { lane: 0, distance: 1550, type: 'caltrop_pickup'  },  // between bands 3 & 4
-    { lane: 2, distance: 2450, type: 'snipe_pickup'    },  // between bands 5 & 6 (L2 has rock@2200, clear here)
-    { lane: 1, distance: 2950, type: 'caltrop_pickup'  },  // between bands 6 & 7
-    { lane: 0, distance: 3850, type: 'snipe_pickup'    },  // between bands 8 & 9 (L1 clear@3600)
-    { lane: 2, distance: 4700, type: 'caltrop_pickup'  },  // between bands 10 & 11 (L0 clear@4500)
-    { lane: 1, distance: 5200, type: 'snipe_pickup'    },  // between bands 12 & 13 (L2 clear@4950)
-    { lane: 0, distance: 6150, type: 'caltrop_pickup'  },  // between bands 13 & 14 (L2 clear@5900)
-    { lane: 2, distance: 7050, type: 'snipe_pickup'    },  // between bands 15 & 16 (L0 clear@6800)
-    { lane: 1, distance: 8400, type: 'caltrop_pickup'  },  // between bands 18 & 19 (L0 clear@8150)
-    { lane: 0, distance: 9750, type: 'snipe_pickup'    },  // between bands 21 & 22 (L1 clear@9500)
+    { lane: 1, distance:  620, type: 'caltrop_pickup'  },
+    { lane: 2, distance: 1060, type: 'snipe_pickup'    },
+    { lane: 0, distance: 1630, type: 'caltrop_pickup'  },
+    { lane: 1, distance: 2100, type: 'snipe_pickup'    },
+    { lane: 2, distance: 2640, type: 'caltrop_pickup'  },
+    { lane: 0, distance: 3700, type: 'snipe_pickup'    },
+    { lane: 2, distance: 4450, type: 'caltrop_pickup'  },
+    { lane: 1, distance: 5270, type: 'snipe_pickup'    },
+    { lane: 0, distance: 5780, type: 'caltrop_pickup'  },
+    { lane: 1, distance: 7630, type: 'snipe_pickup'    },
+    { lane: 2, distance: 8680, type: 'caltrop_pickup'  },
+    { lane: 0, distance: 9120, type: 'snipe_pickup'    }
   ]
 };
 
 // ─── Track 2 ─────────────────────────────────────────────────────────────────
-// 12 000 units, 28 bands, 56 obstacles.
-// Medium difficulty: more double-rock bands, alternating debuff pressure.
-// No band has rocks in all 3 lanes.
+// 9 400 units, 32 bands (~28% gate, ~59% damage, ~13% relief).
+// Water-heavy. Rewards water_shield.
+// 9 gates, open lanes: 1→2→1→0→1→2→1→0→1 (all shifts ≤1).
+// Gates at: 500,1500,2500,3550,4600,5650,6700,7750,8800
+// Gaps: 1000,1000,1050,1050,1050,1050,1050,1050 — all ≥ 800.
 export const TRACK_2 = {
   id:     'track_2',
   name:   'Track 2',
-  length: 12000,
+  length: 9400,
   obstacles: [
-    // Band 1 @ 450: rock L0, water L1 — L2 clear
-    { lane: 0, distance:  450, type: 'rock'  },
-    { lane: 1, distance:  450, type: 'water' },
+    // ── Seg 0: pre-gate bands ──────────────────────────────────────────────
+    // Band 1 @ 240: damage — water L0, water L1, ice L2
+    { lane: 0, distance:  240, type: 'water' },
+    { lane: 1, distance:  240, type: 'water' },
+    { lane: 2, distance:  240, type: 'ice'   },
 
-    // Band 2 @ 900: ice L1, rock L2 — L0 clear
-    { lane: 1, distance:  900, type: 'ice'  },
-    { lane: 2, distance:  900, type: 'rock' },
+    // Band 2 @ 400: relief — water L0, water L2 — L1 clear
+    { lane: 0, distance:  400, type: 'water' },
+    { lane: 2, distance:  400, type: 'water' },
 
-    // Band 3 @ 1350: rock L0, ice L2 — L1 clear
-    { lane: 0, distance: 1350, type: 'rock' },
-    { lane: 2, distance: 1350, type: 'ice'  },
+    // ── Gate 1 @ 500: open=1 (rock L0, rock L2, water L1) ─────────────────
+    { lane: 0, distance:  500, type: 'rock'  },
+    { lane: 2, distance:  500, type: 'rock'  },
+    { lane: 1, distance:  500, type: 'water' },
 
-    // Band 4 @ 1800: water L0, rock L1, ice L2 — all blocked
-    { lane: 0, distance: 1800, type: 'water' },
-    { lane: 1, distance: 1800, type: 'rock'  },
-    { lane: 2, distance: 1800, type: 'ice'   },
+    // ── Seg 1→2: 500→1500 ─────────────────────────────────────────────────
+    // Band 4 @ 700: damage — water L0, water L1, water L2
+    { lane: 0, distance:  700, type: 'water' },
+    { lane: 1, distance:  700, type: 'water' },
+    { lane: 2, distance:  700, type: 'water' },
 
-    // Band 5 @ 2300: rock L1, water L2 — L0 clear
-    { lane: 1, distance: 2300, type: 'rock'  },
-    { lane: 2, distance: 2300, type: 'water' },
+    // Band 5 @ 950: damage — ice L0, water L1, water L2
+    { lane: 0, distance:  950, type: 'ice'   },
+    { lane: 1, distance:  950, type: 'water' },
+    { lane: 2, distance:  950, type: 'water' },
 
-    // Band 6 @ 2750: ice L0, rock L2 — L1 clear
-    { lane: 0, distance: 2750, type: 'ice'  },
-    { lane: 2, distance: 2750, type: 'rock' },
+    // Band 6 @ 1200: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 1200, type: 'water' },
+    { lane: 1, distance: 1200, type: 'water' },
+    { lane: 2, distance: 1200, type: 'ice'   },
 
-    // Band 7 @ 3200: rock L0, rock L1 — L2 clear (must go right)
-    { lane: 0, distance: 3200, type: 'rock' },
-    { lane: 1, distance: 3200, type: 'rock' },
+    // ── Gate 2 @ 1500: open=2 (rock L0, rock L1, water L2) ────────────────
+    { lane: 0, distance: 1500, type: 'rock'  },
+    { lane: 1, distance: 1500, type: 'rock'  },
+    { lane: 2, distance: 1500, type: 'water' },
 
-    // Band 8 @ 3700: water L1, ice L2 — L0 clear
-    { lane: 1, distance: 3700, type: 'water' },
-    { lane: 2, distance: 3700, type: 'ice'   },
+    // ── Seg 2→3: 1500→2500 ────────────────────────────────────────────────
+    // Band 8 @ 1700: damage — water L0, water L1, water L2
+    { lane: 0, distance: 1700, type: 'water' },
+    { lane: 1, distance: 1700, type: 'water' },
+    { lane: 2, distance: 1700, type: 'water' },
 
-    // Band 9 @ 4150: rock L0, water L2 — L1 clear
-    { lane: 0, distance: 4150, type: 'rock'  },
-    { lane: 2, distance: 4150, type: 'water' },
+    // Band 9 @ 1950: relief — ice L0, water L2 — L1 clear
+    { lane: 0, distance: 1950, type: 'ice'   },
+    { lane: 2, distance: 1950, type: 'water' },
 
-    // Band 10 @ 4600: ice L0, rock L1, water L2 — all blocked
-    { lane: 0, distance: 4600, type: 'ice'   },
-    { lane: 1, distance: 4600, type: 'rock'  },
-    { lane: 2, distance: 4600, type: 'water' },
+    // Band 10 @ 2220: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 2220, type: 'water' },
+    { lane: 1, distance: 2220, type: 'water' },
+    { lane: 2, distance: 2220, type: 'ice'   },
 
-    // Band 11 @ 5100: rock L1, ice L2 — L0 clear
-    { lane: 1, distance: 5100, type: 'rock' },
-    { lane: 2, distance: 5100, type: 'ice'  },
+    // ── Gate 3 @ 2500: open=1 (rock L0, rock L2, water L1) ────────────────
+    { lane: 0, distance: 2500, type: 'rock'  },
+    { lane: 2, distance: 2500, type: 'rock'  },
+    { lane: 1, distance: 2500, type: 'water' },
 
-    // Band 12 @ 5550: water L0, rock L2 — L1 clear
-    { lane: 0, distance: 5550, type: 'water' },
-    { lane: 2, distance: 5550, type: 'rock'  },
+    // ── Seg 3→4: 2500→3550 ────────────────────────────────────────────────
+    // Band 12 @ 2760: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 2760, type: 'ice'   },
+    { lane: 1, distance: 2760, type: 'water' },
+    { lane: 2, distance: 2760, type: 'water' },
 
-    // Band 13 @ 6000: rock L0, ice L1 — L2 clear
-    { lane: 0, distance: 6000, type: 'rock' },
-    { lane: 1, distance: 6000, type: 'ice'  },
+    // Band 13 @ 3060: damage — water L0, water L1, water L2
+    { lane: 0, distance: 3060, type: 'water' },
+    { lane: 1, distance: 3060, type: 'water' },
+    { lane: 2, distance: 3060, type: 'water' },
 
-    // Band 14 @ 6450: rock L1, rock L2 — L0 clear (must go left)
-    { lane: 1, distance: 6450, type: 'rock' },
-    { lane: 2, distance: 6450, type: 'rock' },
+    // Band 14 @ 3300: relief — water L0, water L2 — L1 clear
+    { lane: 0, distance: 3300, type: 'water' },
+    { lane: 2, distance: 3300, type: 'water' },
 
-    // Band 15 @ 6900: ice L0, water L2 — L1 clear
-    { lane: 0, distance: 6900, type: 'ice'   },
-    { lane: 2, distance: 6900, type: 'water' },
+    // ── Gate 4 @ 3550: open=0 (rock L1, rock L2, water L0) ────────────────
+    { lane: 1, distance: 3550, type: 'rock'  },
+    { lane: 2, distance: 3550, type: 'rock'  },
+    { lane: 0, distance: 3550, type: 'water' },
 
-    // Band 16 @ 7350: water L0, rock L1, ice L2 — all blocked
-    { lane: 0, distance: 7350, type: 'water' },
-    { lane: 1, distance: 7350, type: 'rock'  },
-    { lane: 2, distance: 7350, type: 'ice'   },
+    // ── Seg 4→5: 3550→4600 ────────────────────────────────────────────────
+    // Band 16 @ 3800: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 3800, type: 'water' },
+    { lane: 1, distance: 3800, type: 'water' },
+    { lane: 2, distance: 3800, type: 'ice'   },
 
-    // Band 17 @ 7800: rock L0, water L1 — L2 clear
-    { lane: 0, distance: 7800, type: 'rock'  },
-    { lane: 1, distance: 7800, type: 'water' },
+    // Band 17 @ 4100: damage — water L0, ice L1, water L2
+    { lane: 0, distance: 4100, type: 'water' },
+    { lane: 1, distance: 4100, type: 'ice'   },
+    { lane: 2, distance: 4100, type: 'water' },
 
-    // Band 18 @ 8250: ice L1, rock L2 — L0 clear
-    { lane: 1, distance: 8250, type: 'ice'  },
-    { lane: 2, distance: 8250, type: 'rock' },
+    // Band 18 @ 4350: relief — ice L0, water L2 — L1 clear
+    { lane: 0, distance: 4350, type: 'ice'   },
+    { lane: 2, distance: 4350, type: 'water' },
 
-    // Band 19 @ 8700: rock L0, ice L2 — L1 clear
-    { lane: 0, distance: 8700, type: 'rock' },
-    { lane: 2, distance: 8700, type: 'ice'  },
+    // ── Gate 5 @ 4600: open=1 (rock L0, rock L2, water L1) ────────────────
+    { lane: 0, distance: 4600, type: 'rock'  },
+    { lane: 2, distance: 4600, type: 'rock'  },
+    { lane: 1, distance: 4600, type: 'water' },
 
-    // Band 20 @ 9200: ice L0, water L1, rock L2 — all blocked
-    { lane: 0, distance: 9200, type: 'ice'   },
-    { lane: 1, distance: 9200, type: 'water' },
-    { lane: 2, distance: 9200, type: 'rock'  },
+    // ── Seg 5→6: 4600→5650 ────────────────────────────────────────────────
+    // Band 20 @ 4870: damage — water L0, water L1, water L2
+    { lane: 0, distance: 4870, type: 'water' },
+    { lane: 1, distance: 4870, type: 'water' },
+    { lane: 2, distance: 4870, type: 'water' },
 
-    // Band 21 @ 9650: rock L1, water L2 — L0 clear
-    { lane: 1, distance: 9650, type: 'rock'  },
-    { lane: 2, distance: 9650, type: 'water' },
+    // Band 21 @ 5150: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 5150, type: 'ice'   },
+    { lane: 1, distance: 5150, type: 'water' },
+    { lane: 2, distance: 5150, type: 'water' },
 
-    // Band 22 @ 10100: water L0, rock L1 — L2 clear
-    { lane: 0, distance: 10100, type: 'water' },
-    { lane: 1, distance: 10100, type: 'rock'  },
+    // Band 22 @ 5400: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 5400, type: 'water' },
+    { lane: 1, distance: 5400, type: 'water' },
+    { lane: 2, distance: 5400, type: 'ice'   },
 
-    // Band 23 @ 10550: rock L0, rock L2 — L1 clear
-    { lane: 0, distance: 10550, type: 'rock' },
-    { lane: 2, distance: 10550, type: 'rock' },
+    // ── Gate 6 @ 5650: open=2 (rock L0, rock L1, water L2) ────────────────
+    { lane: 0, distance: 5650, type: 'rock'  },
+    { lane: 1, distance: 5650, type: 'rock'  },
+    { lane: 2, distance: 5650, type: 'water' },
 
-    // Band 24 @ 11000: ice L0, rock L1, water L2 — all blocked
-    { lane: 0, distance: 11000, type: 'ice'   },
-    { lane: 1, distance: 11000, type: 'rock'  },
-    { lane: 2, distance: 11000, type: 'water' },
+    // ── Seg 6→7: 5650→6700 ────────────────────────────────────────────────
+    // Band 24 @ 5900: damage — water L0, water L1, water L2
+    { lane: 0, distance: 5900, type: 'water' },
+    { lane: 1, distance: 5900, type: 'water' },
+    { lane: 2, distance: 5900, type: 'water' },
 
-    // Band 25 @ 11450: rock L0, ice L2 — L1 clear
-    { lane: 0, distance: 11450, type: 'rock' },
-    { lane: 2, distance: 11450, type: 'ice'  },
+    // Band 25 @ 6150: relief — water L0, ice L2 — L1 clear
+    { lane: 0, distance: 6150, type: 'water' },
+    { lane: 2, distance: 6150, type: 'ice'   },
 
-    // Band 26 @ 11750: water L1, rock L2 — L0 clear (finale)
-    { lane: 1, distance: 11750, type: 'water' },
-    { lane: 2, distance: 11750, type: 'rock'  }
+    // Band 26 @ 6450: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 6450, type: 'ice'   },
+    { lane: 1, distance: 6450, type: 'water' },
+    { lane: 2, distance: 6450, type: 'water' },
+
+    // ── Gate 7 @ 6700: open=1 (rock L0, rock L2, water L1) ────────────────
+    { lane: 0, distance: 6700, type: 'rock'  },
+    { lane: 2, distance: 6700, type: 'rock'  },
+    { lane: 1, distance: 6700, type: 'water' },
+
+    // ── Seg 7→8: 6700→7750 ────────────────────────────────────────────────
+    // Band 28 @ 6970: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 6970, type: 'water' },
+    { lane: 1, distance: 6970, type: 'water' },
+    { lane: 2, distance: 6970, type: 'ice'   },
+
+    // Band 29 @ 7250: damage — water L0, ice L1, water L2
+    { lane: 0, distance: 7250, type: 'water' },
+    { lane: 1, distance: 7250, type: 'ice'   },
+    { lane: 2, distance: 7250, type: 'water' },
+
+    // Band 30 @ 7500: relief — water L0, water L1 — L2 clear
+    { lane: 0, distance: 7500, type: 'water' },
+    { lane: 1, distance: 7500, type: 'water' },
+
+    // ── Gate 8 @ 7750: open=0 (rock L1, rock L2, water L0) ────────────────
+    { lane: 1, distance: 7750, type: 'rock'  },
+    { lane: 2, distance: 7750, type: 'rock'  },
+    { lane: 0, distance: 7750, type: 'water' },
+
+    // ── Seg 8→9: 7750→8800 ────────────────────────────────────────────────
+    // Band 32 @ 8020: damage — water L0, water L1, water L2
+    { lane: 0, distance: 8020, type: 'water' },
+    { lane: 1, distance: 8020, type: 'water' },
+    { lane: 2, distance: 8020, type: 'water' },
+
+    // Band 33 @ 8300: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 8300, type: 'ice'   },
+    { lane: 1, distance: 8300, type: 'water' },
+    { lane: 2, distance: 8300, type: 'water' },
+
+    // Band 34 @ 8560: relief — water L1, water L2 — L0 clear
+    { lane: 1, distance: 8560, type: 'water' },
+    { lane: 2, distance: 8560, type: 'water' },
+
+    // ── Gate 9 @ 8800: open=1 (rock L0, rock L2, water L1) — finale ─────────
+    { lane: 0, distance: 8800, type: 'rock'  },
+    { lane: 2, distance: 8800, type: 'rock'  },
+    { lane: 1, distance: 8800, type: 'water' },
+
+    // ── Post-finale ────────────────────────────────────────────────────────
+    // Band 35 @ 9060: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 9060, type: 'water' },
+    { lane: 1, distance: 9060, type: 'water' },
+    { lane: 2, distance: 9060, type: 'ice'   },
+
+    // Band 36 @ 9320: damage — water L0, ice L1, water L2
+    { lane: 0, distance: 9320, type: 'water' },
+    { lane: 1, distance: 9320, type: 'ice'   },
+    { lane: 2, distance: 9320, type: 'water' }
   ],
   pickups: [
-    { lane: 2, distance:  650, type: 'caltrop_pickup'  },  // between bands 1 & 2 (L0 clear@450)
-    { lane: 0, distance: 1150, type: 'snipe_pickup'    },  // between bands 2 & 3 (L0 clear@900)
-    { lane: 1, distance: 1600, type: 'caltrop_pickup'  },  // between bands 3 & 4 (L1 clear@1350)
-    { lane: 0, distance: 2550, type: 'snipe_pickup'    },  // between bands 5 & 6 (L0 clear@2300)
-    { lane: 1, distance: 3000, type: 'caltrop_pickup'  },  // between bands 6 & 7 (L1 clear@2750)
-    { lane: 2, distance: 3450, type: 'snipe_pickup'    },  // between bands 7 & 8 (L2 clear@3200)
-    { lane: 0, distance: 4300, type: 'caltrop_pickup'  },  // between bands 9 & 10 (L1 clear@4150)
-    { lane: 1, distance: 5350, type: 'snipe_pickup'    },  // between bands 11 & 12 (L0 clear@5100)
-    { lane: 2, distance: 6200, type: 'caltrop_pickup'  },  // between bands 13 & 14 (L2 clear@6000)
-    { lane: 0, distance: 7150, type: 'snipe_pickup'    },  // between bands 15 & 16 (L1 clear@6900)
-    { lane: 1, distance: 9000, type: 'caltrop_pickup'  },  // between bands 21 & 22 (L0 clear@9650)
-    { lane: 0, distance: 10350, type: 'snipe_pickup'   },  // between bands 22 & 23 (L2 clear@10100)
+    { lane: 1, distance:  620, type: 'caltrop_pickup'  },
+    { lane: 0, distance: 1060, type: 'snipe_pickup'    },
+    { lane: 2, distance: 1630, type: 'caltrop_pickup'  },
+    { lane: 1, distance: 2100, type: 'snipe_pickup'    },
+    { lane: 0, distance: 2640, type: 'caltrop_pickup'  },
+    { lane: 2, distance: 3700, type: 'snipe_pickup'    },
+    { lane: 1, distance: 4450, type: 'caltrop_pickup'  },
+    { lane: 0, distance: 5270, type: 'snipe_pickup'    },
+    { lane: 2, distance: 5780, type: 'caltrop_pickup'  },
+    { lane: 1, distance: 7630, type: 'snipe_pickup'    },
+    { lane: 0, distance: 8680, type: 'caltrop_pickup'  }
   ]
 };
 
 // ─── Track 3 ─────────────────────────────────────────────────────────────────
-// 12 000 units, 29 bands, 58 obstacles.
-// Gauntlet: cannot be completed by staying in any one lane.
-// Mid-section forces 4 mandatory switches through tight corridors.
-// Heavy debuff pressure in late section.
-// No band has rocks in all 3 lanes.
+// 9 900 units, 37 bands (~32% gate, ~54% damage, ~14% relief).
+// Mixed ice/water. More demanding with ~35% gate proportion.
+// 12 gates, open lanes: 1→0→1→2→1→0→1→2→1→0→1→2 (all shifts ≤1).
+// Gates at: 450,1250,2050,2850,3650,4450,5250,6050,6850,7650,8450,9250
+// Gaps: 800×11 — all ≥ 800.
 export const TRACK_3 = {
   id:     'track_3',
   name:   'Track 3',
-  length: 12000,
+  length: 9900,
   obstacles: [
-    // Band 1 @ 400: rock L0, water L1 — L2 clear
-    { lane: 0, distance:  400, type: 'rock'  },
-    { lane: 1, distance:  400, type: 'water' },
+    // ── Seg 0: pre-gate ────────────────────────────────────────────────────
+    // Band 1 @ 220: damage — ice L0, water L1, ice L2
+    { lane: 0, distance:  220, type: 'ice'   },
+    { lane: 1, distance:  220, type: 'water' },
+    { lane: 2, distance:  220, type: 'ice'   },
 
-    // Band 2 @ 850: ice L0, rock L2 — L1 clear
-    { lane: 0, distance:  850, type: 'ice'  },
-    { lane: 2, distance:  850, type: 'rock' },
+    // ── Gate 1 @ 450: open=1 (rock L0, rock L2, water L1) ─────────────────
+    { lane: 0, distance:  450, type: 'rock'  },
+    { lane: 2, distance:  450, type: 'rock'  },
+    { lane: 1, distance:  450, type: 'water' },
 
-    // Band 3 @ 1300: rock L1, ice L2 — L0 clear
-    { lane: 1, distance: 1300, type: 'rock' },
-    { lane: 2, distance: 1300, type: 'ice'  },
+    // ── Seg 1→2: 450→1250 (800) ───────────────────────────────────────────
+    // Band 3 @ 650: damage — ice L0, ice L1, water L2
+    { lane: 0, distance:  650, type: 'ice'   },
+    { lane: 1, distance:  650, type: 'ice'   },
+    { lane: 2, distance:  650, type: 'water' },
 
-    // Band 4 @ 1750: water L0, rock L1, ice L2 — all blocked
-    { lane: 0, distance: 1750, type: 'water' },
-    { lane: 1, distance: 1750, type: 'rock'  },
-    { lane: 2, distance: 1750, type: 'ice'   },
+    // Band 4 @ 1000: relief — ice L0, water L2 — L1 clear
+    { lane: 0, distance: 1000, type: 'ice'   },
+    { lane: 2, distance: 1000, type: 'water' },
 
-    // Band 5 @ 2200: rock L0, ice L1 — L2 clear
-    { lane: 0, distance: 2200, type: 'rock' },
-    { lane: 1, distance: 2200, type: 'ice'  },
+    // ── Gate 2 @ 1250: open=0 (rock L1, rock L2, ice L0) ──────────────────
+    { lane: 1, distance: 1250, type: 'rock' },
+    { lane: 2, distance: 1250, type: 'rock' },
+    { lane: 0, distance: 1250, type: 'ice'  },
 
-    // Band 6 @ 2650: water L1, rock L2 — L0 clear
-    { lane: 1, distance: 2650, type: 'water' },
-    { lane: 2, distance: 2650, type: 'rock'  },
+    // ── Seg 2→3: 1250→2050 (800) ──────────────────────────────────────────
+    // Band 6 @ 1450: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 1450, type: 'water' },
+    { lane: 1, distance: 1450, type: 'water' },
+    { lane: 2, distance: 1450, type: 'ice'   },
 
-    // Band 7 @ 3100: ice L0, rock L2 — L1 clear
-    { lane: 0, distance: 3100, type: 'ice'  },
-    { lane: 2, distance: 3100, type: 'rock' },
+    // Band 7 @ 1780: relief — water L1, ice L2 — L0 clear
+    { lane: 1, distance: 1780, type: 'water' },
+    { lane: 2, distance: 1780, type: 'ice'   },
 
-    // ── GAUNTLET (3600–5800): forced 4 lane-switches ─────────────────────────
-    // Step 1 @ 3600: rock L0, ice L1, rock L2 — only L1 (costs ice debuff unless ice_grip)
-    { lane: 0, distance: 3600, type: 'rock' },
-    { lane: 1, distance: 3600, type: 'ice'  },
-    { lane: 2, distance: 3600, type: 'rock' },
+    // ── Gate 3 @ 2050: open=1 (rock L0, rock L2, ice L1) ──────────────────
+    { lane: 0, distance: 2050, type: 'rock' },
+    { lane: 2, distance: 2050, type: 'rock' },
+    { lane: 1, distance: 2050, type: 'ice'  },
 
-    // Step 2 @ 4100: rock L1, rock L2 — must go L0 (coming from L1)
-    { lane: 1, distance: 4100, type: 'rock' },
-    { lane: 2, distance: 4100, type: 'rock' },
+    // ── Seg 3→4: 2050→2850 (800) ──────────────────────────────────────────
+    // Band 9 @ 2280: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 2280, type: 'ice'   },
+    { lane: 1, distance: 2280, type: 'water' },
+    { lane: 2, distance: 2280, type: 'water' },
 
-    // Step 3 @ 4600: rock L0, water L1 — must go L2 (coming from L0)
-    { lane: 0, distance: 4600, type: 'rock'  },
-    { lane: 1, distance: 4600, type: 'water' },
+    // Band 10 @ 2600: damage — water L0, ice L1, water L2
+    { lane: 0, distance: 2600, type: 'water' },
+    { lane: 1, distance: 2600, type: 'ice'   },
+    { lane: 2, distance: 2600, type: 'water' },
 
-    // Step 4 @ 5100: rock L1, rock L2 — must go L0 again
-    { lane: 1, distance: 5100, type: 'rock' },
-    { lane: 2, distance: 5100, type: 'rock' },
+    // ── Gate 4 @ 2850: open=2 (rock L0, rock L1, water L2) ────────────────
+    { lane: 0, distance: 2850, type: 'rock'  },
+    { lane: 1, distance: 2850, type: 'rock'  },
+    { lane: 2, distance: 2850, type: 'water' },
 
-    // Step 5 @ 5600: rock L0, ice L2 — must go L1
-    { lane: 0, distance: 5600, type: 'rock' },
-    { lane: 2, distance: 5600, type: 'ice'  },
-    // ── End gauntlet ─────────────────────────────────────────────────────────
+    // ── Seg 4→5: 2850→3650 (800) ──────────────────────────────────────────
+    // Band 12 @ 3070: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 3070, type: 'ice'   },
+    { lane: 1, distance: 3070, type: 'ice'   },
+    { lane: 2, distance: 3070, type: 'water' },
 
-    // Band 13 @ 6100: water L0, rock L1, ice L2 — all blocked
-    { lane: 0, distance: 6100, type: 'water' },
-    { lane: 1, distance: 6100, type: 'rock'  },
-    { lane: 2, distance: 6100, type: 'ice'   },
+    // Band 13 @ 3380: relief — ice L0, water L1 — L2 clear
+    { lane: 0, distance: 3380, type: 'ice'   },
+    { lane: 1, distance: 3380, type: 'water' },
 
-    // Band 14 @ 6550: rock L0, water L2 — L1 clear
-    { lane: 0, distance: 6550, type: 'rock'  },
-    { lane: 2, distance: 6550, type: 'water' },
+    // ── Gate 5 @ 3650: open=1 (rock L0, rock L2, ice L1) ──────────────────
+    { lane: 0, distance: 3650, type: 'rock' },
+    { lane: 2, distance: 3650, type: 'rock' },
+    { lane: 1, distance: 3650, type: 'ice'  },
 
-    // Band 15 @ 7000: ice L0, rock L1 — L2 clear
-    { lane: 0, distance: 7000, type: 'ice'  },
-    { lane: 1, distance: 7000, type: 'rock' },
+    // ── Seg 5→6: 3650→4450 (800) ──────────────────────────────────────────
+    // Band 15 @ 3880: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 3880, type: 'water' },
+    { lane: 1, distance: 3880, type: 'water' },
+    { lane: 2, distance: 3880, type: 'ice'   },
 
-    // Band 16 @ 7500: rock L1, water L2 — L0 clear
-    { lane: 1, distance: 7500, type: 'rock'  },
-    { lane: 2, distance: 7500, type: 'water' },
+    // Band 16 @ 4190: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 4190, type: 'ice'   },
+    { lane: 1, distance: 4190, type: 'water' },
+    { lane: 2, distance: 4190, type: 'water' },
 
-    // Band 17 @ 7950: ice L0, rock L2 — L1 clear
-    { lane: 0, distance: 7950, type: 'ice'  },
-    { lane: 2, distance: 7950, type: 'rock' },
+    // ── Gate 6 @ 4450: open=0 (rock L1, rock L2, water L0) ────────────────
+    { lane: 1, distance: 4450, type: 'rock'  },
+    { lane: 2, distance: 4450, type: 'rock'  },
+    { lane: 0, distance: 4450, type: 'water' },
 
-    // Band 18 @ 8400: rock L0, ice L1, water L2 — all blocked
-    { lane: 0, distance: 8400, type: 'rock'  },
-    { lane: 1, distance: 8400, type: 'ice'   },
-    { lane: 2, distance: 8400, type: 'water' },
+    // ── Seg 6→7: 4450→5250 (800) ──────────────────────────────────────────
+    // Band 18 @ 4680: damage — water L0, ice L1, ice L2
+    { lane: 0, distance: 4680, type: 'water' },
+    { lane: 1, distance: 4680, type: 'ice'   },
+    { lane: 2, distance: 4680, type: 'ice'   },
 
-    // Band 19 @ 8900: water L0, rock L2 — L1 clear
-    { lane: 0, distance: 8900, type: 'water' },
-    { lane: 2, distance: 8900, type: 'rock'  },
+    // Band 19 @ 4990: relief — water L1, water L2 — L0 clear
+    { lane: 1, distance: 4990, type: 'water' },
+    { lane: 2, distance: 4990, type: 'water' },
 
-    // Band 20 @ 9350: rock L0, rock L1 — L2 clear (double rock)
-    { lane: 0, distance: 9350, type: 'rock' },
-    { lane: 1, distance: 9350, type: 'rock' },
+    // ── Gate 7 @ 5250: open=1 (rock L0, rock L2, water L1) ────────────────
+    { lane: 0, distance: 5250, type: 'rock'  },
+    { lane: 2, distance: 5250, type: 'rock'  },
+    { lane: 1, distance: 5250, type: 'water' },
 
-    // Band 21 @ 9800: ice L1, rock L2 — L0 clear
-    { lane: 1, distance: 9800, type: 'ice'  },
-    { lane: 2, distance: 9800, type: 'rock' },
+    // ── Seg 7→8: 5250→6050 (800) ──────────────────────────────────────────
+    // Band 21 @ 5480: damage — ice L0, water L1, ice L2
+    { lane: 0, distance: 5480, type: 'ice'   },
+    { lane: 1, distance: 5480, type: 'water' },
+    { lane: 2, distance: 5480, type: 'ice'   },
 
-    // Band 22 @ 10250: water L0, ice L2 — L1 clear
-    { lane: 0, distance: 10250, type: 'water' },
-    { lane: 2, distance: 10250, type: 'ice'   },
+    // Band 22 @ 5790: damage — water L0, ice L1, water L2
+    { lane: 0, distance: 5790, type: 'water' },
+    { lane: 1, distance: 5790, type: 'ice'   },
+    { lane: 2, distance: 5790, type: 'water' },
 
-    // Band 23 @ 10700: rock L0, water L1, ice L2 — all blocked
-    { lane: 0, distance: 10700, type: 'rock'  },
-    { lane: 1, distance: 10700, type: 'water' },
-    { lane: 2, distance: 10700, type: 'ice'   },
+    // ── Gate 8 @ 6050: open=2 (rock L0, rock L1, ice L2) ──────────────────
+    { lane: 0, distance: 6050, type: 'rock' },
+    { lane: 1, distance: 6050, type: 'rock' },
+    { lane: 2, distance: 6050, type: 'ice'  },
 
-    // Band 24 @ 11150: ice L0, rock L1 — L2 clear
-    { lane: 0, distance: 11150, type: 'ice'  },
-    { lane: 1, distance: 11150, type: 'rock' },
+    // ── Seg 8→9: 6050→6850 (800) ──────────────────────────────────────────
+    // Band 24 @ 6280: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 6280, type: 'ice'   },
+    { lane: 1, distance: 6280, type: 'water' },
+    { lane: 2, distance: 6280, type: 'water' },
 
-    // Band 25 @ 11600: rock L1, water L2 — L0 clear
-    { lane: 1, distance: 11600, type: 'rock'  },
-    { lane: 2, distance: 11600, type: 'water' },
+    // Band 25 @ 6590: relief — ice L0, ice L1 — L2 clear
+    { lane: 0, distance: 6590, type: 'ice' },
+    { lane: 1, distance: 6590, type: 'ice' },
 
-    // Band 26 (finale) @ 11850: rock L0, ice L1, water L2 — all blocked
-    { lane: 0, distance: 11850, type: 'rock'  },
-    { lane: 1, distance: 11850, type: 'ice'   },
-    { lane: 2, distance: 11850, type: 'water' }
+    // ── Gate 9 @ 6850: open=1 (rock L0, rock L2, ice L1) ──────────────────
+    { lane: 0, distance: 6850, type: 'rock' },
+    { lane: 2, distance: 6850, type: 'rock' },
+    { lane: 1, distance: 6850, type: 'ice'  },
+
+    // ── Seg 9→10: 6850→7650 (800) ─────────────────────────────────────────
+    // Band 27 @ 7070: damage — water L0, water L1, ice L2
+    { lane: 0, distance: 7070, type: 'water' },
+    { lane: 1, distance: 7070, type: 'water' },
+    { lane: 2, distance: 7070, type: 'ice'   },
+
+    // Band 28 @ 7380: damage — ice L0, water L1, water L2
+    { lane: 0, distance: 7380, type: 'ice'   },
+    { lane: 1, distance: 7380, type: 'water' },
+    { lane: 2, distance: 7380, type: 'water' },
+
+    // ── Gate 10 @ 7650: open=0 (rock L1, rock L2, ice L0) ─────────────────
+    { lane: 1, distance: 7650, type: 'rock' },
+    { lane: 2, distance: 7650, type: 'rock' },
+    { lane: 0, distance: 7650, type: 'ice'  },
+
+    // ── Seg 10→11: 7650→8450 (800) ────────────────────────────────────────
+    // Band 30 @ 7880: damage — ice L0, ice L1, water L2
+    { lane: 0, distance: 7880, type: 'ice'   },
+    { lane: 1, distance: 7880, type: 'ice'   },
+    { lane: 2, distance: 7880, type: 'water' },
+
+    // Band 31 @ 8160: relief — water L0, water L2 — L1 clear
+    { lane: 0, distance: 8160, type: 'water' },
+    { lane: 2, distance: 8160, type: 'water' },
+
+    // ── Gate 11 @ 8450: open=1 (rock L0, rock L2, water L1) ───────────────
+    { lane: 0, distance: 8450, type: 'rock'  },
+    { lane: 2, distance: 8450, type: 'rock'  },
+    { lane: 1, distance: 8450, type: 'water' },
+
+    // ── Seg 11→12: 8450→9250 (800) ────────────────────────────────────────
+    // Band 33 @ 8680: damage — ice L0, water L1, ice L2
+    { lane: 0, distance: 8680, type: 'ice'   },
+    { lane: 1, distance: 8680, type: 'water' },
+    { lane: 2, distance: 8680, type: 'ice'   },
+
+    // Band 34 @ 8980: damage — water L0, ice L1, water L2
+    { lane: 0, distance: 8980, type: 'water' },
+    { lane: 1, distance: 8980, type: 'ice'   },
+    { lane: 2, distance: 8980, type: 'water' },
+
+    // ── Gate 12 @ 9250: open=2 (rock L0, rock L1, ice L2) ─────────────────
+    { lane: 0, distance: 9250, type: 'rock' },
+    { lane: 1, distance: 9250, type: 'rock' },
+    { lane: 2, distance: 9250, type: 'ice'  },
+
+    // ── Post-finale (after gate 12 @9250) ─────────────────────────────────
+    // Band 36 @ 9480: damage — water L0, ice L1, water L2
+    { lane: 0, distance: 9480, type: 'water' },
+    { lane: 1, distance: 9480, type: 'ice'   },
+    { lane: 2, distance: 9480, type: 'water' },
+
+    // Band 37 @ 9750: damage — ice L0, water L1, ice L2
+    { lane: 0, distance: 9750, type: 'ice'   },
+    { lane: 1, distance: 9750, type: 'water' },
+    { lane: 2, distance: 9750, type: 'ice'   }
   ],
   pickups: [
-    { lane: 2, distance:  600, type: 'caltrop_pickup'  },  // between bands 1 & 2 (L2 clear@400)
-    { lane: 1, distance: 1100, type: 'snipe_pickup'    },  // between bands 2 & 3 (L1 clear@850)
-    { lane: 0, distance: 1550, type: 'caltrop_pickup'  },  // between bands 3 & 4 (L0 clear@1300)
-    { lane: 2, distance: 2450, type: 'snipe_pickup'    },  // between bands 5 & 6 (L2 clear@2200)
-    { lane: 0, distance: 2900, type: 'caltrop_pickup'  },  // between bands 6 & 7 (L0 clear@2650)
-    { lane: 1, distance: 3350, type: 'snipe_pickup'    },  // between bands 7 & gauntlet (L1 clear@3100)
-    { lane: 2, distance: 5350, type: 'caltrop_pickup'  },  // after gauntlet step 4 (L2 clear@5100)
-    { lane: 1, distance: 6300, type: 'snipe_pickup'    },  // between bands 13 & 14 (L1 clear@6100)
-    { lane: 2, distance: 6750, type: 'caltrop_pickup'  },  // between bands 14 & 15 (L2 clear@6550)
-    { lane: 2, distance: 7700, type: 'snipe_pickup'    },  // between bands 15 & 16 (L2 clear@7000)
-    { lane: 1, distance: 9100, type: 'caltrop_pickup'  },  // between bands 19 & 20 (L1 clear@8900)
-    { lane: 0, distance: 10500, type: 'snipe_pickup'   },  // between bands 22 & 23 (L1 clear@10250)
+    { lane: 1, distance:  570, type: 'caltrop_pickup'  },
+    { lane: 2, distance: 1130, type: 'snipe_pickup'    },
+    { lane: 0, distance: 1900, type: 'caltrop_pickup'  },
+    { lane: 2, distance: 2450, type: 'snipe_pickup'    },
+    { lane: 1, distance: 3120, type: 'caltrop_pickup'  },
+    { lane: 0, distance: 3780, type: 'snipe_pickup'    },
+    { lane: 2, distance: 4560, type: 'caltrop_pickup'  },
+    { lane: 0, distance: 5120, type: 'snipe_pickup'    },
+    { lane: 1, distance: 5870, type: 'caltrop_pickup'  },
+    { lane: 0, distance: 7160, type: 'snipe_pickup'    },
+    { lane: 2, distance: 8270, type: 'caltrop_pickup'  },
+    { lane: 1, distance: 9650, type: 'snipe_pickup'    }
   ]
 };
 
