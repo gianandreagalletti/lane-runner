@@ -167,10 +167,10 @@ function _processIntent(s, ps, intent) {
       if (sl.id === 'snipe_shot' && sl.uses > 0) {
         sl.uses--; ps.boostUseCount.snipe_shot++;
         s.projectiles.push({
-          ownerSlot: ps.idx,
-          lane:      ps.lane,
-          z:         ps.trackPosition,
-          spawnTick: s.tick
+          casterSlot: ps.idx,
+          lane:       ps.lane,
+          z:          ps.trackPosition,
+          spawnTick:  s.tick
         });
       }
       // Rock break (slot 0): reactive — arm the press-ahead timer
@@ -186,7 +186,11 @@ function _processIntent(s, ps, intent) {
 }
 
 function _placeCaltrop(s, ps) {
-  const insertZ = Math.max(0, ps.trackPosition - 200 * 100); // 200 units behind, in cu
+  // Drop 100 units behind caster (10000 cu). Must be < CAM_BACK - NEAR_CLAMP (165 units)
+  // so the debris is visible; must be > COL_HALF_Y (15 units) so caster doesn't self-hit.
+  // No hitByPlayer pre-mark needed: caster moves forward and can never re-enter the
+  // caltrop's collision zone (COL_HALF_Y_SCALED = 1500 cu). _findCollision skips it.
+  const insertZ = Math.max(0, ps.trackPosition - 100 * 100); // 100 units behind, in cu
   const caltrop = {
     lane:            ps.lane,
     distanceScaled:  insertZ,
@@ -196,8 +200,6 @@ function _placeCaltrop(s, ps) {
     isCaltrop:       true,
     casterSlot:      ps.idx
   };
-  // Caster can't hit their own caltrop — pre-mark as hit
-  caltrop.hitByPlayer[ps.idx] = true;
 
   const insertIdx = _insertSorted(s.obstacles, caltrop);
 
@@ -222,7 +224,7 @@ function _tickProjectiles(s) {
     let hitPlayer = null;
     let hitDist   = Infinity;
     for (const ps of s.players) {
-      if (ps.idx === proj.ownerSlot) continue;
+      if (ps.idx === proj.casterSlot) continue;
       if (ps.gs !== 'RUNNING' && ps.gs !== 'REACTIVE') continue;
       if (ps.lane !== proj.lane) continue;
       const pz = ps.trackPosition;
@@ -319,6 +321,7 @@ function _findCollision(obstacles, ps) {
   for (let i = 0; i < obstacles.length; i++) {
     const o = obstacles[i];
     if (o.hitByPlayer[ps.idx] || o.pendingByPlayer[ps.idx]) continue;
+    if (o.isCaltrop && o.casterSlot === ps.idx) continue; // caster never hits own caltrop
     if (o.lane !== ps.lane) continue;
     if (Math.abs(ps.trackPosition - o.distanceScaled) < COL_HALF_Y_SCALED) return i;
   }
