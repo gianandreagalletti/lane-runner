@@ -3,6 +3,7 @@ import { CANVAS_W, CANVAS_H, ALL_TRACKS, getTrackById } from './track.js';
 import { loadProgress, resetProgress, xpToNext } from './progression.js';
 import { exportLog, getLog, loadReplay } from './sessionLog.js';
 import { PLAYER_COLOR_HEX } from './controls.js';
+import { getAllTracks } from './TrackStore.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super({ key: 'MenuScene' }); }
@@ -49,6 +50,7 @@ export class MenuScene extends Phaser.Scene {
 
     // Generated track button
     this._genTrackBtn(CANVAS_W / 2, 318 + ALL_TRACKS.length * 78);
+    this._yourTracksBtn(CANVAS_W / 2, 318 + (ALL_TRACKS.length + 1) * 78);
 
     // Bottom bar: Reset P1 | Reset P2 | Reset P3 | Controls | Export
     const resetP1Bg = this.add.rectangle(60, CANVAS_H - 34, 100, 30, 0x160808)
@@ -126,7 +128,7 @@ export class MenuScene extends Phaser.Scene {
         this.time.delayedCall(1500, () => this.replayLabel.setText('REPLAY LAST RUN'));
         return;
       }
-      const trackData = getTrackById(r.matchConfig.trackId);
+      const trackData = r.matchConfig.trackData || getTrackById(r.matchConfig.trackId);
       if (!trackData) { this.replayLabel.setText('Track not found'); return; }
       this.scene.start('RunScene', {
         mode: r.matchConfig.mode,
@@ -167,6 +169,7 @@ export class MenuScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-THREE', () => this._go(ALL_TRACKS[2]));
     this.input.keyboard.on('keydown-ENTER', () => this._go(ALL_TRACKS[0]));
     this.input.keyboard.on('keydown-FOUR',  () => this._goGenerated());
+    this.input.keyboard.on('keydown-FIVE', () => this._goEditor());
   }
 
   _drawProgressBadge() {
@@ -257,5 +260,25 @@ export class MenuScene extends Phaser.Scene {
 
   _goGenerated() {
     this.scene.start('ConfigScene', { mode: this.mode, claims: this._claims || null });
+  }
+
+  _yourTracksBtn(x, y) {
+    const savedCount = getAllTracks().length;
+    const bg = this.add.rectangle(x, y, 460, 66, 0x0e1420)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(2, 0x2a1a3a);
+    this.add.text(x, y - 10, '[5]  YOUR TRACKS', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#BB88EE'
+    }).setOrigin(0.5);
+    this.add.text(x, y + 14, savedCount > 0 ? `${savedCount} saved track${savedCount !== 1 ? 's' : ''}` : 'no saved tracks yet', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#4a2a5a'
+    }).setOrigin(0.5);
+    bg.on('pointerover', () => bg.setFillStyle(0x14182a));
+    bg.on('pointerout',  () => bg.setFillStyle(0x0e1420));
+    bg.on('pointerdown', () => this._goEditor());
+  }
+
+  _goEditor() {
+    this.scene.start('ConfigScene', { mode: this.mode, startMode: 'costruisci', claims: this._claims || null });
   }
 }

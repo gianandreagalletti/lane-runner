@@ -80,6 +80,26 @@ in ~33s; with debuffs closer to 45s as calibrated.
 
 ---
 
+## Config Layout Fix + Single Rail (post-Session 10)
+
+### Layout
+Rewrote ConfigScene to use region-based layout with a RowCursor instead of hardcoded y-constants.
+Header: title left, mode toggle right — no overlap at any supported size.
+Controls panel flows top-to-bottom; advancing panel expands in place by rebuilding `_genPanel` (state lives in `this._params`, not in UI objects).
+Preview area masked with GeometryMask to clip map drawing.
+Dev-mode layout assertions added (`_assertLayoutItems`) — fire on localhost, name both rects on failure.
+
+### Single rail
+`sim/validateTrack.js`: 0, 1, or 2 rails per band are all valid.
+- 0: no-op
+- 1: ordinary single-lane hazard (no gate rules apply)
+- 2: gate (spacing >= 800u, open-lane continuity, must have non-rock hazard in open lane)
+- 3: violation ("all three lanes have guard rails")
+Gate-specific rules filter `gateDists` to bands with exactly 2 rocks — 1-rail bands are invisible to them.
+Generator output unchanged: it never produces 1-rail bands, and the 200-track stress test still passes.
+
+---
+
 # Session 10 — Track Content Rebuild + Debuff Rebalance
 
 ## Summary

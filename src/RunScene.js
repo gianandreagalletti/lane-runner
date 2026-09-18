@@ -60,7 +60,9 @@ export class RunScene extends Phaser.Scene {
     const profileIds = ['p1', 'p2', 'p3'];
     if (!this._isReplay) {
       this._matchConfig = {
-        trackId: this.trackData.id, seed: Date.now() & 0xFFFFFF,
+        trackId: this.trackData.id,
+        trackData: this.trackData.isGenerated ? undefined : this.trackData,
+        seed: Date.now() & 0xFFFFFF,
         mode: this.mode, rules: {},
         players: Array.from({ length: numPlayers }, (_, i) => ({
           slot: i,
@@ -68,8 +70,8 @@ export class RunScene extends Phaser.Scene {
           inputSource: this._claims ? this._claims[i].inputSource : (i === 0 ? 'local_keyboard' : 'pad'),
           loadout: JSON.parse(JSON.stringify(this._loadouts[i]))
         })),
-        trackParams: this.trackData.params  || this._trackParams || null,
-        trackSeed:   this.trackData.seed    != null ? this.trackData.seed : (this._trackSeed != null ? this._trackSeed : null)
+        trackParams: this.trackData.isGenerated ? (this.trackData.params || this._trackParams || null) : null,
+        trackSeed:   this.trackData.isGenerated ? (this.trackData.seed != null ? this.trackData.seed : (this._trackSeed != null ? this._trackSeed : null)) : null
       };
       const rt = JSON.parse(JSON.stringify(this._matchConfig));
       if (JSON.stringify(rt) !== JSON.stringify(this._matchConfig)) console.error('MatchConfig round-trip FAILED');
