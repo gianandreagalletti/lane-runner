@@ -1,3 +1,62 @@
+# Session 10 — Track Content Rebuild + Debuff Rebalance
+
+## Summary
+
+Rebuilt all 3 tracks from scratch to comply with new 5-rule assertion system.
+Changed ICE_DEBUFF_TICKS and WATER_DEBUFF_TICKS from 120 → 75 (already done in previous session).
+Added gate band visualization to PlanScene planning map.
+
+## Changes
+
+### sim/rules.js
+- ICE_DEBUFF_TICKS: 75 (was 120) — confirmed already at 75
+- WATER_DEBUFF_TICKS: 75 (was 120) — confirmed already at 75
+- SNIPE_DEBUFF_TICKS: 120 — unchanged
+
+### sim/state.js
+- Renamed _assertNoAllRockBands → assertTrackValid (already implemented all 5 rules from previous session)
+
+### src/track.js — full rebuild
+
+#### Track 1 (ice-heavy)
+- Length: 10 200 units
+- Bands: 40 total — 10 gate (25%), 23 damage (57%), 7 relief (17%)
+- Gates at: 500,1500,2500,3550,4600,5650,6700,7750,8800,9700
+- Open lanes: 1→0→1→2→1→0→1→2→1→0 (all shifts ≤1, all gaps ≥ 900)
+- Ice dominant in damage bands; one water per damage band for variety
+- Headless time (ice_grip L2 + water_shield L2 + quick_step L1 + rock_break ×3): **2709 ticks (~45.1s)**
+
+#### Track 2 (water-heavy)
+- Length: 9 400 units
+- Bands: 36 total — 9 gate (25%), 21 damage (58%), 6 relief (17%)
+- Gates at: 500,1500,2500,3550,4600,5650,6700,7750,8800
+- Open lanes: 1→2→1→0→1→2→1→0→1 (all shifts ≤1, all gaps ≥ 1000)
+- Water dominant in damage bands; one ice per damage band for variety
+- Headless time (same loadout): **2731 ticks (~45.5s)**
+
+#### Track 3 (mixed, gate-heavy)
+- Length: 9 900 units
+- Bands: 37 total — 12 gate (32%), 19 damage (51%), 6 relief (16%)
+- Gates at: 450,1250,2050,2850,3650,4450,5250,6050,6850,7650,8450,9250
+- Open lanes: 1→0→1→2→1→0→1→2→1→0→1→2 (all shifts ≤1, all gaps = 800)
+- Mixed ice+water in damage bands
+- Headless time (same loadout): **2760 ticks (~46.0s)**
+
+### src/PlanScene.js — planning map updates
+- Gate bands: gold border on left and right column edges + "GATE / Ln" label showing open lane
+- Per-lane hazard summary: changed to "Nxice  Nxwtr  Nxrail" format (separate ice/water counts)
+- New helper method _getGateDists() extracts gate band positions and open lanes
+
+## Band composition rules (enforced by assertTrackValid)
+
+1. No band has rocks in all 3 lanes
+2. Rocks only in gate bands: 0 or exactly 2 rocks per band
+3. Gate bands must have a non-rock obstacle (in the open lane)
+4. Consecutive gates >= 800 units apart
+5. Open lane shifts by at most 1 between consecutive gates
+
+---
+
 # Session 9 — Graded Draft + Wake Visual + Debug Mode
 
 ## Summary
