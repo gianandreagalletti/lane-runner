@@ -148,6 +148,21 @@ export const TRACK_1 = {
     { lane: 0, distance: 11700, type: 'rock'  },
     { lane: 1, distance: 11700, type: 'ice'   },
     { lane: 2, distance: 11700, type: 'water' }
+  ],
+  pickups: [
+    // ~6 caltrop + ~6 snipe pickups, spread through run, never in only-clear lane of obstacle band
+    { lane: 2, distance:  600, type: 'caltrop_pickup'  },  // after band 1 (L0 rock, L1 ice → L2 clear, no band here)
+    { lane: 1, distance: 1100, type: 'snipe_pickup'    },  // between bands 2 & 3
+    { lane: 0, distance: 1550, type: 'caltrop_pickup'  },  // between bands 3 & 4
+    { lane: 2, distance: 2450, type: 'snipe_pickup'    },  // between bands 5 & 6 (L2 has rock@2200, clear here)
+    { lane: 1, distance: 2950, type: 'caltrop_pickup'  },  // between bands 6 & 7
+    { lane: 0, distance: 3850, type: 'snipe_pickup'    },  // between bands 8 & 9 (L1 clear@3600)
+    { lane: 2, distance: 4700, type: 'caltrop_pickup'  },  // between bands 10 & 11 (L0 clear@4500)
+    { lane: 1, distance: 5200, type: 'snipe_pickup'    },  // between bands 12 & 13 (L2 clear@4950)
+    { lane: 0, distance: 6150, type: 'caltrop_pickup'  },  // between bands 13 & 14 (L2 clear@5900)
+    { lane: 2, distance: 7050, type: 'snipe_pickup'    },  // between bands 15 & 16 (L0 clear@6800)
+    { lane: 1, distance: 8400, type: 'caltrop_pickup'  },  // between bands 18 & 19 (L0 clear@8150)
+    { lane: 0, distance: 9750, type: 'snipe_pickup'    },  // between bands 21 & 22 (L1 clear@9500)
   ]
 };
 
@@ -268,6 +283,20 @@ export const TRACK_2 = {
     // Band 26 @ 11750: water L1, rock L2 — L0 clear (finale)
     { lane: 1, distance: 11750, type: 'water' },
     { lane: 2, distance: 11750, type: 'rock'  }
+  ],
+  pickups: [
+    { lane: 2, distance:  650, type: 'caltrop_pickup'  },  // between bands 1 & 2 (L0 clear@450)
+    { lane: 0, distance: 1150, type: 'snipe_pickup'    },  // between bands 2 & 3 (L0 clear@900)
+    { lane: 1, distance: 1600, type: 'caltrop_pickup'  },  // between bands 3 & 4 (L1 clear@1350)
+    { lane: 0, distance: 2550, type: 'snipe_pickup'    },  // between bands 5 & 6 (L0 clear@2300)
+    { lane: 1, distance: 3000, type: 'caltrop_pickup'  },  // between bands 6 & 7 (L1 clear@2750)
+    { lane: 2, distance: 3450, type: 'snipe_pickup'    },  // between bands 7 & 8 (L2 clear@3200)
+    { lane: 0, distance: 4300, type: 'caltrop_pickup'  },  // between bands 9 & 10 (L1 clear@4150)
+    { lane: 1, distance: 5350, type: 'snipe_pickup'    },  // between bands 11 & 12 (L0 clear@5100)
+    { lane: 2, distance: 6200, type: 'caltrop_pickup'  },  // between bands 13 & 14 (L2 clear@6000)
+    { lane: 0, distance: 7150, type: 'snipe_pickup'    },  // between bands 15 & 16 (L1 clear@6900)
+    { lane: 1, distance: 9000, type: 'caltrop_pickup'  },  // between bands 21 & 22 (L0 clear@9650)
+    { lane: 0, distance: 10350, type: 'snipe_pickup'   },  // between bands 22 & 23 (L2 clear@10100)
   ]
 };
 
@@ -393,6 +422,20 @@ export const TRACK_3 = {
     { lane: 0, distance: 11850, type: 'rock'  },
     { lane: 1, distance: 11850, type: 'ice'   },
     { lane: 2, distance: 11850, type: 'water' }
+  ],
+  pickups: [
+    { lane: 2, distance:  600, type: 'caltrop_pickup'  },  // between bands 1 & 2 (L2 clear@400)
+    { lane: 1, distance: 1100, type: 'snipe_pickup'    },  // between bands 2 & 3 (L1 clear@850)
+    { lane: 0, distance: 1550, type: 'caltrop_pickup'  },  // between bands 3 & 4 (L0 clear@1300)
+    { lane: 2, distance: 2450, type: 'snipe_pickup'    },  // between bands 5 & 6 (L2 clear@2200)
+    { lane: 0, distance: 2900, type: 'caltrop_pickup'  },  // between bands 6 & 7 (L0 clear@2650)
+    { lane: 1, distance: 3350, type: 'snipe_pickup'    },  // between bands 7 & gauntlet (L1 clear@3100)
+    { lane: 2, distance: 5350, type: 'caltrop_pickup'  },  // after gauntlet step 4 (L2 clear@5100)
+    { lane: 1, distance: 6300, type: 'snipe_pickup'    },  // between bands 13 & 14 (L1 clear@6100)
+    { lane: 2, distance: 6750, type: 'caltrop_pickup'  },  // between bands 14 & 15 (L2 clear@6550)
+    { lane: 2, distance: 7700, type: 'snipe_pickup'    },  // between bands 15 & 16 (L2 clear@7000)
+    { lane: 1, distance: 9100, type: 'caltrop_pickup'  },  // between bands 19 & 20 (L1 clear@8900)
+    { lane: 0, distance: 10500, type: 'snipe_pickup'   },  // between bands 22 & 23 (L1 clear@10250)
   ]
 };
 

@@ -155,13 +155,14 @@ export class PlanScene extends Phaser.Scene {
   _drawShop() {
     const cx = RP_CX;
     const PASSIVE_IDS = ['ice_grip', 'water_shield', 'quick_step'];
-    const ACTIVE_IDS  = ['rock_break', 'sprint', 'phase'];
+    // BENCHED: phase removed from shop
+    const ACTIVE_IDS  = ['rock_break', 'sprint', 'caltrop', 'snipe_shot'];
     const PASSIVE_BUDGET = BOOST_CONFIG.PASSIVE_POINTS;
     const ACTIVE_BUDGET  = BOOST_CONFIG.ACTIVE_POINTS;
 
     // State (stored on this so ENTER handler can access it)
     const passiveLevels  = this._passiveLevels = { ice_grip: 0, water_shield: 0, quick_step: 0 };
-    const activeCharges  = this._activeCharges = { rock_break: 0, sprint: 0, phase: 0 };
+    const activeCharges  = this._activeCharges = { rock_break: 0, sprint: 0, caltrop: 0, snipe_shot: 0 };
 
     this.add.text(cx, 42, 'BUILD LOADOUT', {
       fontSize: '20px', fontFamily: 'monospace', color: '#AABBCC'
@@ -224,7 +225,8 @@ export class PlanScene extends Phaser.Scene {
       fontSize: '11px', fontFamily: 'monospace', color: '#664422'
     }).setOrigin(0, 0);
 
-    const activeRowY = { rock_break: 286, sprint: 320, phase: 354 };
+    // BENCHED: phase row removed; 4 active rows now
+    const activeRowY = { rock_break: 286, sprint: 320, caltrop: 354, snipe_shot: 388 };
     const activeRefs = {};
 
     for (const id of ACTIVE_IDS) {
@@ -260,7 +262,7 @@ export class PlanScene extends Phaser.Scene {
     }
 
     // Confirm button
-    const btnY = 420;
+    const btnY = 430;
     const startBg = this.add.rectangle(cx, btnY, 260, 54, 0x0e2214)
       .setInteractive({ useHandCursor: true })
       .setStrokeStyle(2, 0x223322);
@@ -418,7 +420,8 @@ function _passiveSpent(passiveLevels) {
 
 function _activeSpent(activeCharges) {
   let spent = 0;
-  for (const id of ['rock_break', 'sprint', 'phase']) {
+  // BENCHED: phase removed
+  for (const id of ['rock_break', 'sprint', 'caltrop', 'snipe_shot']) {
     spent += BOOST_CONFIG.actives[id].costPerCharge * (activeCharges[id] ?? 0);
   }
   return spent;

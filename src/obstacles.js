@@ -12,6 +12,20 @@ const OBS_COLORS = {
   water: 0x3AA8C4,
 };
 
+// Caltrop: violet-shifted ice color blended at low strength
+const CALTROP_COLOR       = 0x9B6BDA;
+const CALTROP_FRONT_COLOR = 0x6B4BAA;
+
+// Pickup colors and size
+const PICKUP_COLORS = {
+  caltrop_pickup: 0x9B6BDA,
+  snipe_pickup:   0x7ED957
+};
+const PICKUP_RADIUS_TU = 28;  // radius in track units
+
+// Projectile color
+const PROJ_COLOR = 0xFF8844;
+
 // Front face is ~66% brightness of top face
 function darkenColor(hex) {
   const r = ((hex >> 16) & 0xFF) * 0.66 | 0;
@@ -41,6 +55,69 @@ export class Obstacles {
 
     // Sorted-index pointer for culling (obstacles are sorted by distanceScaled)
     this._startIdx = 0;
+  }
+
+  /** Reset cull index — call after inserting caltrop obstacles to prevent stale skip */
+  invalidateCullIndex() {
+    this._startIdx = 0;
+  }
+
+  /**
+   * Get renderable items for pickups (always rendered regardless of collection state).
+   */
+  getPickupRenderItems(pickups, cameraZ) {
+    const items = [];
+    const farZ  = cameraZ + PROJ.DRAW_DISTANCE;
+    for (const pu of pickups) {
+      const puZ = pu.distanceScaled / CENTI_SCALE;
+      if (puZ < cameraZ + PROJ.NEAR_CLAMP) continue;
+      if (puZ > farZ) continue;
+      const zRel = puZ - cameraZ;
+      items.push({ type: 'pickup', pu, zRel });
+    }
+    return items;
+  }
+
+  /** Draw a single pickup at the given zRel. */
+  drawPickup(pu, zRel) {
+    const g = this.graphics;
+    const color = PICKUP_COLORS[pu.type] || 0xFFFFFF;
+    const fogT = PROJ.FOG_ENABLED
+      ? Math.min(Math.pow(zRel / PROJ.DRAW_DISTANCE, 2), 0.82) * PROJ.PERSPECTIVE_BLEND
+      : 0;
+    const finalColor = fogBlend(color, fogT);
+
+    const worldX = LANE_TU[pu.lane];
+    const { x, y, scale } = project(worldX, zRel);
+    const r = PICKUP_RADIUS_TU * scale;
+
+    g.fillStyle(finalColor, 0.9);
+    g.fillCircle(x, y - r, r);
+    // Diamond outline
+    g.lineStyle(1, finalColor, 0.6);
+    g.beginPath();
+    g.moveTo(x, y - r * 2.2);
+    g.lineTo(x + r * 0.9, y - r);
+    g.lineTo(x, y + 0.1);
+    g.lineTo(x - r * 0.9, y - r);
+    g.closePath();
+    g.strokePath();
+  }
+
+  /** Draw a snipe projectile as a bright dot/streak. */
+  drawProjectile(proj, zRel) {
+    const g = this.graphics;
+    const worldX = LANE_TU[proj.lane];
+    const { x, y, scale } = project(worldX, zRel);
+    const r = 6 * scale;
+    g.fillStyle(PROJ_COLOR, 1.0);
+    g.fillCircle(x, y, r);
+    // Short streak behind
+    g.lineStyle(2, PROJ_COLOR, 0.5);
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x, y + 18 * scale);
+    g.strokePath();
   }
 
   /**
@@ -92,8 +169,11 @@ export class Obstacles {
       ? Math.min(Math.pow(zRel / PROJ.DRAW_DISTANCE, 2), 0.82) * PROJ.PERSPECTIVE_BLEND
       : 0;
 
-    const topColor   = fogBlend(OBS_COLORS[obs.type], fogT);
-    const frontColor = fogBlend(darkenColor(OBS_COLORS[obs.type]), fogT);
+    // Caltrops use violet color instead of standard ice color
+    const baseTopColor   = obs.isCaltrop ? CALTROP_COLOR       : OBS_COLORS[obs.type];
+    const baseFrontColor = obs.isCaltrop ? CALTROP_FRONT_COLOR : darkenColor(OBS_COLORS[obs.type]);
+    const topColor   = fogBlend(baseTopColor, fogT);
+    const frontColor = fogBlend(baseFrontColor, fogT);
 
     const halfW = OBS_W_TU / 2;
     const zFront = zRel;
@@ -127,7 +207,8 @@ export class Obstacles {
 
     // Shape marks on top face
     if (obs.type === 'rock')  this._drawRockMark(g, topFL, topFR, topBL, topBR);
-    if (obs.type === 'ice')   this._drawIceMark(g, topFL, topFR, topBL, topBR);
+    if (obs.type === 'ice' && !obs.isCaltrop) this._drawIceMark(g, topFL, topFR, topBL, topBR);
+    if (obs.isCaltrop)        this._drawCaltropMark(g, topFL, topFR, topBL, topBR);
     if (obs.type === 'water') this._drawWaterMark(g, topFL, topFR, topBL, topBR);
 
     // Pending highlight
@@ -184,6 +265,24 @@ export class Obstacles {
       g.lineTo(x0 + dx * 2, y);
       g.lineTo(x0 + dx * 3, y - 2);
       g.lineTo(x1,           y);
+      g.strokePath();
+    }
+  }
+
+  // Caltrop: spike pattern (short lines radiating from center)
+  _drawCaltropMark(g, tFL, tFR, tBL, tBR) {
+    const cx = (tFL.x + tFR.x + tBL.x + tBR.x) / 4;
+    const cy = (tFL.y + tFR.y + tBL.y + tBR.y) / 4;
+    const hw = (tFR.x - tFL.x) * 0.28;
+    const hh = (tBL.y - tFL.y) * 0.35;
+    g.lineStyle(2, 0xE0AAFF, 0.8);
+    // 6 spikes radiating outward
+    const angles = [0, 60, 120, 180, 240, 300];
+    for (const deg of angles) {
+      const rad = deg * Math.PI / 180;
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.lineTo(cx + Math.cos(rad) * hw, cy + Math.sin(rad) * hh * 0.8);
       g.strokePath();
     }
   }

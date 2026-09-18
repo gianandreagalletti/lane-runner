@@ -81,6 +81,34 @@ export function rockBreakEffect(scene, obs, laneCenterX) {
 }
 
 /**
+ * Snipe hit effect: brief orange-red flash on the hit player's screen position.
+ * @param {Phaser.Scene} scene
+ * @param {object} playerObj — Player instance with .x/.y screen coords
+ */
+export function snipeHitEffect(scene, playerObj) {
+  const cx = playerObj.x;
+  const cy = playerObj.y;
+
+  // Quick flash ring
+  const gfx = scene.add.graphics();
+  gfx.setDepth(27);
+  const proxy = { radius: 10, alpha: 0.9 };
+  scene.tweens.add({
+    targets:  proxy,
+    radius:   55,
+    alpha:    0,
+    duration: 200,
+    ease:     'Quad.easeOut',
+    onUpdate: () => {
+      gfx.clear();
+      gfx.lineStyle(3, 0xFF6644, proxy.alpha);
+      gfx.strokeCircle(cx, cy - 20, proxy.radius);
+    },
+    onComplete: () => gfx.destroy()
+  });
+}
+
+/**
  * Phase effect: player turns translucent then fades back; soft ripple rings.
  * @param {Phaser.Scene} scene
  * @param {object} player      — Player instance with drawAlpha

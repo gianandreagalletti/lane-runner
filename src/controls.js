@@ -1,10 +1,11 @@
 // Single source of truth for all key bindings.
 // All input handling and UI must reference this — no key literals elsewhere.
 
+// Canonical slots: 0=rock_break, 1=sprint, 2=caltrop, 3=snipe_shot
 export const BINDINGS = {
-  p1:     { left: 'A',    right: 'D',     boost: ['ONE',   'TWO',   'THREE'] },
-  p2:     { left: 'LEFT', right: 'RIGHT', boost: ['EIGHT', 'NINE',  'ZERO']  },
-  p3:     { left: 'Q',    right: 'E',     boost: ['I',     'O',     'P']     },
+  p1:     { left: 'A',    right: 'D',     boost: ['ONE',   'TWO',   'THREE', 'FOUR'] },
+  p2:     { left: 'LEFT', right: 'RIGHT', boost: ['EIGHT', 'NINE',  'ZERO',  'SEVEN'] },
+  p3:     { left: 'Q',    right: 'E',     boost: ['I',     'O',     'P',     'U']    },
   global: { retry: 'R',   menu: 'M',      back:  'ESCAPE', advance: 'SPACE'  }
 };
 
@@ -12,9 +13,9 @@ export const BINDINGS = {
 export const KEY_DISPLAY = {
   A: 'A', D: 'D', LEFT: '←', RIGHT: '→',
   Q: 'Q', E: 'E',
-  ONE: '1', TWO: '2', THREE: '3',
-  EIGHT: '8', NINE: '9', ZERO: '0',
-  I: 'I', O: 'O', P: 'P',
+  ONE: '1', TWO: '2', THREE: '3', FOUR: '4',
+  SEVEN: '7', EIGHT: '8', NINE: '9', ZERO: '0',
+  I: 'I', O: 'O', P: 'P', U: 'U',
   R: 'R', M: 'M', ESCAPE: 'ESC', SPACE: 'SPACE', ENTER: 'ENTER'
 };
 

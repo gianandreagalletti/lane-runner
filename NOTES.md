@@ -1,3 +1,89 @@
+# Session 7 — Draft, Caltrop, Snipe Shot, Track Pickups
+
+## Summary
+
+Session 7 adds the first competitive mechanics that act across players: draft
+slipstream (passive, free), caltrop (placed hazard), and snipe shot (aimed
+projectile). Phase boost is benched (removed from shop/progression/keymapping;
+code preserved in sim with `// BENCHED: phase` comments).
+
+## Speed composition (exact order, non-negotiable)
+
+```
+let speed = BASE_SPEED_CU;                            // 500
+if (debuff)  speed = floor(speed * debuffFactor/100);
+if (sprint)  speed = floor(speed * 140/100);
+if (draft)   speed = floor(speed * DRAFT_FACTOR/100); // 108
+```
+
+Verified example: water debuff (no shield) + drafting:
+  500 * 30/100 = 150, then 150 * 108/100 = 162 cu/tick
+
+Snipe debuff factor = 65 — not affected by any passive (ice_grip, water_shield
+have no effect). Caltrop sets debuffType='ice' so ice_grip DOES reduce it.
+
+## Draft
+
+- Passive, free, always on — no action required.
+- Triggers when nearest ahead-in-lane player gap is 0 < gap ≤ DRAFT_RANGE_CU (15000 cu).
+- Does NOT stack (only one nearest-ahead player counts).
+- Computed every tick in sim/step.js before _tickPlayer; ps.isDrafting stored for HUD.
+- Visual: double chevron (» ») above player billboard in player.js; "» DRAFT »" in HUD.
+
+## Caltrop (slot 2)
+
+- Placed at caster's position minus 200 units (in cu: trackPosition - 200*CENTI_SCALE).
+- Uses ice debuff path — ice_grip reduces it. NOT a snipe debuff.
+- isCaltrop=true flag distinguishes it from track ice for rendering.
+- Obstacle insert uses binary search (_insertSorted) to maintain sorted order.
+- Caster pre-marked as hitByPlayer to avoid self-hit.
+- Renderer: violet color (#9B6BDA), spike mark instead of ice diagonal lines.
+- `caltrop_placed` event causes RunScene to call `obstacles.invalidateCullIndex()`.
+
+## Snipe Shot (slot 3)
+
+- Projectile moves SNIPE_SPEED_CU (900 cu/tick) forward from caster's position.
+- Lifetime SNIPE_LIFETIME (300 ticks = 5s) or until track end.
+- Hit detection: prevZ < playerZ ≤ newZ per tick. If two players in same tick, lower slot wins.
+- On hit: debuffType='snipe', debuffTicksLeft=SNIPE_DEBUFF_TICKS (120), flashTicksLeft set.
+- Snipe debuff factor = SNIPE_FACTOR (65) regardless of passives.
+- Visual: orange-red dot with trailing streak (obstacles.drawProjectile).
+- snipe_hit event → snipeHitEffect() → orange-red ring flash on hit player.
+
+## Track Pickups
+
+- Per-track array in trackData.pickups: { lane, distance, type: 'caltrop_pickup'|'snipe_pickup' }.
+- Collision: player crosses pickup.distanceScaled this tick (prevPos < ds ≤ newPos).
+- Only granted if player has the boost slot unlocked AND charges < maxCharges.
+- Never removed from world — each player's collection tracked separately via collectedByPlayer[].
+- Visual: caltrop_pickup = violet circle/diamond, snipe_pickup = green circle/diamond.
+- ~6 of each type per track, spread through run. Pickups never placed in the only-clear lane
+  of a band that has an obstacle at the same distance.
+
+## Canonical slot mapping (Session 7)
+
+- Slot 0: rock_break (reactive, hold-to-arm)
+- Slot 1: sprint (instant)
+- Slot 2: caltrop (instant)
+- Slot 3: snipe_shot (instant)
+- BENCHED: phase — was slot 2 in Session 5/6
+
+## Key bindings
+
+- P1: 1/2/3/4 for slots 0–3
+- P2: 8/9/0/7 for slots 0–3
+- P3: I/O/P/U for slots 0–3
+- Gamepad: A=slot0, X=slot1, B=slot2, Y=slot3
+
+## Level-up unlocks (updated)
+
+- Level 2: sprint
+- Level 3: caltrop
+- Level 4: snipe_shot
+- Level 5: quick_step
+
+---
+
 # Session 6 — Perspective Run View
 
 ## Architecture

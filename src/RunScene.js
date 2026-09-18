@@ -16,7 +16,7 @@ import {
 } from './RunSceneRenderer.js';
 import { GamepadInput } from './GamepadInput.js';
 import { GroundRenderer } from './render/GroundRenderer.js';
-import { PROJ, initProjection } from './render/projection.js';
+import { PROJ, LANE_TU, project, initProjection } from './render/projection.js';
 
 const MS_PER_TICK = 1000 / TICK_RATE;
 
@@ -155,6 +155,10 @@ export class RunScene extends Phaser.Scene {
         this._intentLog.push(...tickIntents);
       }
       this._state = step(this._state, tickIntents);
+      // Invalidate obstacle cull index when a caltrop is placed
+      for (const ev of this._state.events) {
+        if (ev.type === 'caltrop_placed') this._obstacles.invalidateCullIndex();
+      }
       handleSimEvents(this, this._state, this._players);
       this._accumMs -= MS_PER_TICK;
       this._simTick++;
@@ -229,6 +233,18 @@ export class RunScene extends Phaser.Scene {
     const obsItems = this._obstacles.getRenderItems(state.obstacles, cameraZ);
     renderables.push(...obsItems);
 
+    // Pickups (always visible)
+    const pickupItems = this._obstacles.getPickupRenderItems(state.pickups, cameraZ);
+    renderables.push(...pickupItems);
+
+    // Projectiles
+    for (const proj of state.projectiles) {
+      const zRel = proj.z / CENTI_SCALE - cameraZ;
+      if (zRel >= PROJ.NEAR_CLAMP && zRel <= PROJ.DRAW_DISTANCE) {
+        renderables.push({ type: 'projectile', proj, zRel });
+      }
+    }
+
     // Players
     state.players.forEach((ps, i) => {
       const zRel = ps.trackPosition / CENTI_SCALE - cameraZ;
@@ -242,6 +258,10 @@ export class RunScene extends Phaser.Scene {
     for (const item of renderables) {
       if (item.type === 'obstacle') {
         this._obstacles.drawItem(item.obs, item.zRel);
+      } else if (item.type === 'pickup') {
+        this._obstacles.drawPickup(item.pu, item.zRel);
+      } else if (item.type === 'projectile') {
+        this._obstacles.drawProjectile(item.proj, item.zRel);
       } else {
         this._players[item.idx].render(item.ps, cameraZ, item.idx);
       }
@@ -274,7 +294,11 @@ export class RunScene extends Phaser.Scene {
       const elapsed = parseFloat((ticks / TICK_RATE).toFixed(2));
       appendLog({ track: this.trackData.id, loadout: ps.loadout,
         outcome: ps.gs === 'COMPLETE' ? 'complete' : 'failed', distance: dist,
-        elapsedMs: Math.round(elapsed * 1000), boostUses: { ...ps.boostUseCount },
+        elapsedMs: Math.round(elapsed * 1000),
+        boostUses: { rock_break: ps.boostUseCount.rock_break ?? 0,
+                     sprint: ps.boostUseCount.sprint ?? 0,
+                     caltrop: ps.boostUseCount.caltrop ?? 0,
+                     snipe_shot: ps.boostUseCount.snipe_shot ?? 0 },
         laneTimeTicks: [...ps.laneTimeTicks], planningTimeMs: this.planningTimeMs });
       const replayData = this._isReplay
         ? { replayOutcome: ps.gs, replayMatched: ps.gs === this._replayOriginalOutcome }

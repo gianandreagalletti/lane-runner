@@ -24,7 +24,8 @@ const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
 const PASSIVE_IDS = ['ice_grip', 'water_shield', 'quick_step'];
-const ACTIVE_IDS  = ['rock_break', 'sprint', 'phase'];
+// BENCHED: phase removed from shop
+const ACTIVE_IDS  = ['rock_break', 'sprint', 'caltrop', 'snipe_shot'];
 const ROW_IDS     = [...PASSIVE_IDS, ...ACTIVE_IDS];
 
 export function buildShopPicker(scene, data) {
@@ -55,8 +56,8 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
 
   // State
   const passiveLevels = { ice_grip: 0, water_shield: 0, quick_step: 0 };
-  const activeCharges = { rock_break: 0, sprint: 0, phase: 0 };
-  let   cursorRow = 0;  // 0–5: passive 0–2, active 0–2
+  const activeCharges = { rock_break: 0, sprint: 0, caltrop: 0, snipe_shot: 0 };
+  let   cursorRow = 0;  // 0–6: passive 0–2, active 0–3
   let   confirmed = false;
 
   // Header
@@ -83,18 +84,18 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
   scene.add.text(px + 6, y0 + 70, 'PASSIVES', {
     fontSize: '10px', fontFamily: 'monospace', color: '#335577'
   }).setOrigin(0, 0);
-  scene.add.text(px + 6, y0 + 196, 'ACTIVES', {
+  scene.add.text(px + 6, y0 + 182, 'ACTIVES', {
     fontSize: '10px', fontFamily: 'monospace', color: '#664422'
   }).setOrigin(0, 0);
 
-  // Row Y positions (6 rows: 3 passive + 3 active)
+  // Row Y positions (7 rows: 3 passive + 4 active)
   const rowY = [
-    y0 + 90,  y0 + 120, y0 + 150,  // passives
-    y0 + 214, y0 + 244, y0 + 274   // actives
+    y0 + 90,  y0 + 116, y0 + 142,  // passives
+    y0 + 198, y0 + 224, y0 + 250, y0 + 276  // actives (4 rows now, BENCHED: phase)
   ];
 
   const rowRefs = [];
-  for (let ri = 0; ri < 6; ri++) {
+  for (let ri = 0; ri < 7; ri++) {
     const ry  = rowY[ri];
     const isP = ri < 3;
     const id  = ROW_IDS[ri];
@@ -116,18 +117,18 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
   }
 
   // Status + confirm button
-  const statusT = scene.add.text(cx, y0 + 308, '', {
+  const statusT = scene.add.text(cx, y0 + 300, '', {
     fontSize: '11px', fontFamily: 'monospace', color: '#667788'
   }).setOrigin(0.5, 0);
-  const btnBg = scene.add.rectangle(cx, y0 + 340, panelW - 16, 36, 0x0a1410)
+  const btnBg = scene.add.rectangle(cx, y0 + 324, panelW - 16, 36, 0x0a1410)
     .setInteractive({ useHandCursor: true })
     .setStrokeStyle(2, 0x223322);
-  const btnT = scene.add.text(cx, y0 + 340, 'CONFIRM', {
+  const btnT = scene.add.text(cx, y0 + 324, 'CONFIRM', {
     fontSize: '16px', fontFamily: 'monospace', color: '#2A5535'
   }).setOrigin(0.5);
   btnBg.on('pointerdown', () => { if (!confirmed) _confirm(); });
 
-  const confirmText = scene.add.text(cx, y0 + 364, '', {
+  const confirmText = scene.add.text(cx, y0 + 348, '', {
     fontSize: '10px', fontFamily: 'monospace', color: '#44AA66'
   }).setOrigin(0.5, 0);
 
@@ -142,7 +143,7 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
     aBudgetT.setText(`A.pts: ${aLeft}/${ACTIVE_BUDGET}`);
     aBudgetT.setColor(aLeft < 0 ? '#FF4444' : '#FFAA44');
 
-    for (let ri = 0; ri < 6; ri++) {
+    for (let ri = 0; ri < 7; ri++) {
       const ref = rowRefs[ri];
       const { id, isP } = ref;
 
@@ -175,7 +176,7 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
       ref.cursorGfx.clear();
       if (ri === cursorRow && !confirmed) {
         ref.cursorGfx.lineStyle(2, pidx === 0 ? 0xFFDD00 : pidx === 1 ? 0xFFAA44 : 0x44FFCC, 0.9);
-        ref.cursorGfx.strokeRect(px + 2, rowY[ri] - 10, panelW - 4, 20);
+        ref.cursorGfx.strokeRect(px + 2, rowY[ri] - 9, panelW - 4, 18);
       }
     }
 
@@ -247,7 +248,7 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
         cursorRow = Math.max(0, cursorRow - 1);
         refresh();
       } else if (e.code === `Key${keys.right}` || e.key === keys.right || e.code === keys.right) {
-        cursorRow = Math.min(5, cursorRow + 1);
+        cursorRow = Math.min(6, cursorRow + 1);
         refresh();
       } else if (e.code === `Key${keys.inc}` || e.key === keys.inc || e.code === keys.inc ||
                  e.code === keys.inc) {
@@ -277,6 +278,7 @@ function _passiveSpent(passiveLevels) {
 
 function _activeSpent(activeCharges) {
   let spent = 0;
+  // BENCHED: phase removed — ACTIVE_IDS now = rock_break, sprint, caltrop, snipe_shot
   for (const id of ACTIVE_IDS) {
     spent += BOOST_CONFIG.actives[id].costPerCharge * (activeCharges[id] ?? 0);
   }

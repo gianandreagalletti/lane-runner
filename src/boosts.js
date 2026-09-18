@@ -40,13 +40,26 @@ export const BOOSTS = {
     desc:       'Pass through ice/water (not rocks)',
     usesPerRun: 1,
     reactive:   false  // phase does NOT participate in the reactive window
+    // BENCHED: phase — kept for legacy/sim compatibility but removed from shop/progression/keymapping
+  },
+  caltrop: {
+    id:         'caltrop',
+    name:       'Caltrop',
+    type:       'active',
+    description: 'Place a slow trap behind you'
+  },
+  snipe_shot: {
+    id:         'snipe_shot',
+    name:       'Snipe Shot',
+    type:       'active',
+    description: 'Fire a shot ahead in your lane'
   }
 };
 
 // Display order: passives row first, actives row second
 export const BOOST_ORDER = [
   'ice_grip', 'water_shield', 'quick_step',
-  'rock_break', 'sprint', 'phase'
+  'rock_break', 'sprint', 'caltrop', 'snipe_shot'
 ];
 
 // Which level first unlocks each boost (1 = starting)
@@ -55,8 +68,10 @@ export const BOOST_UNLOCK_LEVEL = {
   ice_grip:      1,
   water_shield:  1,
   sprint:        2,
-  phase:         3,
-  quick_step:    4
+  caltrop:       3,
+  snipe_shot:    4,
+  quick_step:    5
+  // phase: BENCHED — removed from unlock table
 };
 
 // SINGLE source-of-truth for all boost tuning values.
@@ -72,6 +87,9 @@ export const BOOST_CONFIG = {
   actives: {
     rock_break: { costPerCharge: 2, maxCharges: 3 },
     sprint:     { costPerCharge: 2, maxCharges: 3 },
+    // phase: BENCHED — kept here only to avoid crashing legacy saves that reference it
     phase:      { costPerCharge: 1, maxCharges: 3 },
+    caltrop:    { costPerCharge: 1, maxCharges: 3 },
+    snipe_shot: { costPerCharge: 1, maxCharges: 3 },
   }
 };

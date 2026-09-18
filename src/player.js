@@ -76,6 +76,22 @@ export class Player {
     g.fillStyle(0x000000, 0.35 * (1 - fogT));
     g.fillEllipse(x, y + shadowH * 0.3, shadowW, shadowH);
 
+    // --- Draft slipstream indicator ---
+    if (ps.isDrafting) {
+      g.lineStyle(2, 0xAAEEFF, 0.55);
+      // Two small chevrons above the billboard
+      const chevW = bw * 0.35;
+      const chevH = bh * 0.1;
+      for (let ci = 0; ci < 2; ci++) {
+        const chevY = by - 6 - ci * 7;
+        g.beginPath();
+        g.moveTo(x - chevW, chevY + chevH);
+        g.lineTo(x,         chevY);
+        g.lineTo(x + chevW, chevY + chevH);
+        g.strokePath();
+      }
+    }
+
     // --- Debuff glow ---
     if (ps.debuffType === 'ice') {
       g.fillStyle(0xB8D8E8, 0.35);
@@ -83,13 +99,17 @@ export class Player {
     } else if (ps.debuffType === 'water') {
       g.fillStyle(0x3AA8C4, 0.35);
       g.fillRoundedRect(bx - 4, by - 4, bw + 8, bh + 8, cornerR + 2);
+    } else if (ps.debuffType === 'snipe') {
+      g.fillStyle(0xFF6644, 0.35);
+      g.fillRoundedRect(bx - 4, by - 4, bw + 8, bh + 8, cornerR + 2);
     }
 
     // --- Body colour with flash ---
     let bodyColor = this.baseBodyColor;
     if (ps.flashTicksLeft > 0 && ps.debuffType) {
       const t = ps.flashTicksLeft / FLASH_TICKS;
-      const flashCol = ps.debuffType === 'ice' ? 0x88CCFF : 0x44CCEE;
+      const flashCol = ps.debuffType === 'ice' ? 0x88CCFF :
+                       ps.debuffType === 'snipe' ? 0xFF6644 : 0x44CCEE;
       const c = Phaser.Display.Color.Interpolate.ColorWithColor(
         Phaser.Display.Color.ValueToColor(flashCol),
         Phaser.Display.Color.ValueToColor(this.baseBodyColor),

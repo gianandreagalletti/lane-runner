@@ -1,8 +1,9 @@
 // Per-slot save keys — 1P always uses 'p1', 2P uses 'p1' and 'p2'.
 function saveKey(slot) { return `laneRunner.save.${slot}`; }
 
-// Boosts unlocked at level-up, in order (level 2 → sprint, 3 → phase, 4 → quick_step)
-const LEVELUP_UNLOCKS = ['sprint', 'phase', 'quick_step'];
+// Boosts unlocked at level-up, in order (level 2 → sprint, 3 → caltrop, 4 → snipe_shot, 5 → quick_step)
+// BENCHED: phase removed from unlock sequence
+const LEVELUP_UNLOCKS = ['sprint', 'caltrop', 'snipe_shot', 'quick_step'];
 
 function defaultSave() {
   return {

@@ -2,45 +2,83 @@ import { BOOSTS, BOOST_CONFIG } from '../src/boosts.js';
 import {
   REACTIVE_WINDOW_TICKS, PRESS_AHEAD_TICKS, SPRINT_TICKS,
   ICE_DEBUFF_TICKS, WATER_DEBUFF_TICKS, FLASH_TICKS,
-  LANE_SWITCH_TICKS, PHASE_ALPHA_TICKS,
+  LANE_SWITCH_TICKS,
+  // BENCHED: PHASE_ALPHA_TICKS — still imported so it doesn't break render code that kept it
+  PHASE_ALPHA_TICKS,
   BASE_SPEED_CU,
-  GAP_ELIMINATION_CU, COL_HALF_Y_SCALED
+  GAP_ELIMINATION_CU, COL_HALF_Y_SCALED,
+  DRAFT_RANGE_CU, DRAFT_FACTOR,
+  SNIPE_SPEED_CU, SNIPE_LIFETIME, SNIPE_FACTOR, SNIPE_DEBUFF_TICKS,
+  PICKUP_TYPES
 } from './rules.js';
 
-// Speed helper: Math.floor(BASE_SPEED_CU * factorPct / 100)
-function _speedFromFactor(factorPct) {
-  return Math.floor(BASE_SPEED_CU * factorPct / 100);
-}
+// ─── Speed composition ────────────────────────────────────────────────────────
+// Exact order: debuff → sprint → draft. Each is Math.floor(speed * factor / 100).
 
-// Get the effective speed factor percentage for a player this tick
-function _speedFactorPct(ps) {
-  if (ps.sprintTicksLeft > 0) return 140;
+function _computeSpeed(ps) {
+  let speed = BASE_SPEED_CU;
+
+  // 1. Debuff
   if (ps.debuffType === 'ice') {
     const level = ps.passives?.ice_grip ?? 0;
-    if (level >= 2) return BOOST_CONFIG.passives.ice_grip.levels[1].factorPct;   // 75
-    if (level >= 1) return BOOST_CONFIG.passives.ice_grip.levels[0].factorPct;   // 62
-    return BOOST_CONFIG.passives.ice_grip.baseFactorPct;                          // 50
-  }
-  if (ps.debuffType === 'water') {
+    let factor;
+    if (level >= 2) factor = BOOST_CONFIG.passives.ice_grip.levels[1].factorPct;   // 75
+    else if (level >= 1) factor = BOOST_CONFIG.passives.ice_grip.levels[0].factorPct; // 62
+    else factor = BOOST_CONFIG.passives.ice_grip.baseFactorPct;                        // 50
+    speed = Math.floor(speed * factor / 100);
+  } else if (ps.debuffType === 'water') {
     const level = ps.passives?.water_shield ?? 0;
-    if (level >= 2) return BOOST_CONFIG.passives.water_shield.levels[1].factorPct;  // 65
-    if (level >= 1) return BOOST_CONFIG.passives.water_shield.levels[0].factorPct;  // 47
-    return BOOST_CONFIG.passives.water_shield.baseFactorPct;                         // 30
+    let factor;
+    if (level >= 2) factor = BOOST_CONFIG.passives.water_shield.levels[1].factorPct;  // 65
+    else if (level >= 1) factor = BOOST_CONFIG.passives.water_shield.levels[0].factorPct; // 47
+    else factor = BOOST_CONFIG.passives.water_shield.baseFactorPct;                        // 30
+    speed = Math.floor(speed * factor / 100);
+  } else if (ps.debuffType === 'snipe') {
+    // snipe factor is always SNIPE_FACTOR — not reduced by any passive
+    speed = Math.floor(speed * SNIPE_FACTOR / 100);
   }
-  return 100;
+
+  // 2. Sprint
+  if (ps.sprintTicksLeft > 0) {
+    speed = Math.floor(speed * 140 / 100);
+  }
+
+  // 3. Draft
+  if (ps.isDrafting) {
+    speed = Math.floor(speed * DRAFT_FACTOR / 100);
+  }
+
+  return speed;
+}
+
+// Binary search insert into sorted obstacles array (ascending distanceScaled)
+function _insertSorted(arr, obs) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (arr[mid].distanceScaled < obs.distanceScaled) lo = mid + 1;
+    else hi = mid;
+  }
+  arr.splice(lo, 0, obs);
+  return lo; // return insert index for _startIdx adjustment
 }
 
 export function step(state, intents) {
   const s = {
     ...state,
-    tick:      state.tick + 1,
-    events:    [],
-    obstacles: state.obstacles.map(o => ({
+    tick:        state.tick + 1,
+    events:      [],
+    obstacles:   state.obstacles.map(o => ({
       ...o,
       hitByPlayer:     [...o.hitByPlayer],
       pendingByPlayer: [...o.pendingByPlayer]
     })),
-    players: state.players.map(ps => ({
+    pickups:     state.pickups.map(p => ({
+      ...p,
+      collectedByPlayer: [...p.collectedByPlayer]
+    })),
+    projectiles: state.projectiles.map(p => ({ ...p })),
+    players:     state.players.map(ps => ({
       ...ps,
       slots:          ps.slots.map(sl => ({ ...sl })),
       boostPressTimer:[...ps.boostPressTimer],
@@ -53,12 +91,30 @@ export function step(state, intents) {
     }))
   };
 
+  // Process intents
   const sorted = [...intents].sort((a, b) => a.playerSlot - b.playerSlot);
   for (const intent of sorted) {
     const ps = s.players[intent.playerSlot];
     if (ps) _processIntent(s, ps, intent);
   }
 
+  // Compute draft for each player BEFORE moving (uses previous positions)
+  for (const ps of s.players) {
+    if (!_isActive(ps)) { ps.isDrafting = false; continue; }
+    ps.isDrafting = false;
+    for (const other of s.players) {
+      if (other.idx === ps.idx) continue;
+      if (other.gs !== 'RUNNING' && other.gs !== 'REACTIVE') continue;
+      if (other.lane !== ps.lane) continue;
+      const gap = other.trackPosition - ps.trackPosition;
+      if (gap > 0 && gap <= DRAFT_RANGE_CU) { ps.isDrafting = true; break; }
+    }
+  }
+
+  // Advance projectiles
+  _tickProjectiles(s);
+
+  // Tick each player
   for (const ps of s.players) _tickPlayer(s, ps);
 
   if (s.mode !== '1p') {
@@ -87,17 +143,28 @@ function _processIntent(s, ps, intent) {
     const sl = ps.slots[i];
     if (!sl) return;
     if (ps.gs === 'RUNNING') {
-      // Sprint (slot 1): non-reactive active
+      // Sprint (slot 1): non-reactive active, instant
       if (sl.id === 'sprint' && sl.uses > 0) {
         sl.uses--; ps.boostUseCount.sprint++;
         ps.sprintTicksLeft = SPRINT_TICKS;
       }
-      // Phase (slot 2): non-reactive, works on ice/water only
-      // Phase does NOT enter the reactive window and does NOT fire preemptively
-      if (sl.id === 'phase' && sl.uses > 0) {
-        // Phase is handled at collision time in RUNNING state
-        // Just arm it via boostPressTimer so _handleCollision can pick it up
-        ps.boostPressTimer[i] = PRESS_AHEAD_TICKS;
+      // BENCHED: phase (was slot 2) — code preserved but slot 2 is now caltrop
+      // if (sl.id === 'phase' && sl.uses > 0) { ... }
+
+      // Caltrop (slot 2): place a slow trap behind caster
+      if (sl.id === 'caltrop' && sl.uses > 0) {
+        sl.uses--; ps.boostUseCount.caltrop++;
+        _placeCaltrop(s, ps);
+      }
+      // Snipe Shot (slot 3): fire a projectile forward in caster's lane
+      if (sl.id === 'snipe_shot' && sl.uses > 0) {
+        sl.uses--; ps.boostUseCount.snipe_shot++;
+        s.projectiles.push({
+          ownerSlot: ps.idx,
+          lane:      ps.lane,
+          z:         ps.trackPosition,
+          spawnTick: s.tick
+        });
       }
       // Rock break (slot 0): reactive — arm the press-ahead timer
       if (sl.id === 'rock_break' && sl.isReactive && sl.uses > 0) {
@@ -105,10 +172,74 @@ function _processIntent(s, ps, intent) {
       }
     } else if (ps.gs === 'REACTIVE') {
       // Only slot 0 (rock_break) can cancel a lethal rock collision in reactive window
-      // Slot 2 (phase) is explicitly rejected here
-      if (i !== 2) _tryReactiveBoost(s, ps, i);
+      // BENCHED: phase (slot 2) is explicitly rejected here
+      if (i === 0) _tryReactiveBoost(s, ps, i);
     }
   }
+}
+
+function _placeCaltrop(s, ps) {
+  const insertZ = Math.max(0, ps.trackPosition - 200 * 100); // 200 units behind, in cu
+  const caltrop = {
+    lane:            ps.lane,
+    distanceScaled:  insertZ,
+    type:            'ice',          // uses ice collision path
+    hitByPlayer:     new Array(s.numPlayers).fill(false),
+    pendingByPlayer: new Array(s.numPlayers).fill(false),
+    isCaltrop:       true,
+    casterSlot:      ps.idx
+  };
+  // Caster can't hit their own caltrop — pre-mark as hit
+  caltrop.hitByPlayer[ps.idx] = true;
+
+  const insertIdx = _insertSorted(s.obstacles, caltrop);
+
+  // If insert position is before _startIdx in the Obstacles renderer, that's handled
+  // by the renderer's invalidateCullIndex() call (see RunScene). The sim doesn't
+  // care about rendering indices — collision uses the full array.
+  // Emit event so RunScene can reset render cull index
+  s.events.push({ type: 'caltrop_placed', insertIdx });
+}
+
+function _tickProjectiles(s) {
+  const surviving = [];
+  for (const proj of s.projectiles) {
+    const prevZ  = proj.z;
+    const newZ   = proj.z + SNIPE_SPEED_CU;
+    const age    = s.tick - proj.spawnTick;
+
+    // Check lifetime and out-of-bounds
+    if (age > SNIPE_LIFETIME || newZ > s.trackLength) continue;
+
+    // Check collision with active non-owner players in same lane
+    let hitPlayer = null;
+    let hitDist   = Infinity;
+    for (const ps of s.players) {
+      if (ps.idx === proj.ownerSlot) continue;
+      if (ps.gs !== 'RUNNING' && ps.gs !== 'REACTIVE') continue;
+      if (ps.lane !== proj.lane) continue;
+      const pz = ps.trackPosition;
+      // Projectile crosses player this tick: prevZ < pz <= newZ
+      if (prevZ < pz && pz <= newZ) {
+        const d = pz - prevZ;
+        if (d < hitDist) { hitDist = d; hitPlayer = ps; }
+      }
+    }
+
+    if (hitPlayer) {
+      // Apply snipe debuff — refreshes duration, never stacks
+      hitPlayer.debuffType      = 'snipe';
+      hitPlayer.debuffTicksLeft = SNIPE_DEBUFF_TICKS;
+      hitPlayer.flashTicksLeft  = FLASH_TICKS;
+      const obsX = proj.lane; // lane index, renderer converts to screen X
+      s.events.push({ type: 'snipe_hit', playerIdx: hitPlayer.idx, lane: proj.lane });
+      // Projectile consumed — do not push to surviving
+      continue;
+    }
+
+    surviving.push({ ...proj, z: newZ });
+  }
+  s.projectiles = surviving;
 }
 
 function _switchLane(ps, dir) {
@@ -126,24 +257,50 @@ function _tickPlayer(s, ps) {
   if (ps.debuffTicksLeft    > 0) { ps.debuffTicksLeft--; if (ps.debuffTicksLeft === 0) ps.debuffType = null; }
   if (ps.flashTicksLeft     > 0) ps.flashTicksLeft--;
   if (ps.laneVisualTicksLeft > 0) ps.laneVisualTicksLeft--;
-  if (ps.drawAlphaTicksLeft  > 0) {
-    ps.drawAlphaTicksLeft--;
-    ps.drawAlpha = 0.4 + 0.6 * (1 - ps.drawAlphaTicksLeft / PHASE_ALPHA_TICKS);
-  }
-  for (let i = 0; i < 3; i++) { if (ps.boostPressTimer[i] > 0) ps.boostPressTimer[i]--; }
+  // BENCHED: phase drawAlpha animation
+  // if (ps.drawAlphaTicksLeft > 0) {
+  //   ps.drawAlphaTicksLeft--;
+  //   ps.drawAlpha = 0.4 + 0.6 * (1 - ps.drawAlphaTicksLeft / PHASE_ALPHA_TICKS);
+  // }
+  for (let i = 0; i < 4; i++) { if (ps.boostPressTimer[i] > 0) ps.boostPressTimer[i]--; }
 
   ps.laneTimeTicks[ps.lane]++;
 
   if (ps.gs === 'RUNNING') {
-    const factorPct = _speedFactorPct(ps);
-    const speed = _speedFromFactor(factorPct);
+    const speed = _computeSpeed(ps);
+    const prevPos = ps.trackPosition;
     ps.trackPosition += speed;
+
+    // Check pickups
+    _checkPickups(s, ps, prevPos, ps.trackPosition);
 
     const obsIdx = _findCollision(s.obstacles, ps);
     if (obsIdx >= 0) _handleCollision(s, ps, obsIdx);
     else if (ps.trackPosition >= s.trackLength) { ps.gs = 'COMPLETE'; ps.gsEndTick = s.tick; }
   } else if (ps.gs === 'REACTIVE') {
     if (--ps.reactiveTicksLeft <= 0) _resolveReactiveDeath(s, ps);
+  }
+}
+
+function _checkPickups(s, ps, prevPos, newPos) {
+  for (const pu of s.pickups) {
+    if (pu.collectedByPlayer[ps.idx]) continue;
+    if (pu.lane !== ps.lane) continue;
+    // Player crosses pickup this tick: prevPos < distanceScaled <= newPos
+    if (prevPos < pu.distanceScaled && pu.distanceScaled <= newPos) {
+      const chargeKey = PICKUP_TYPES[pu.type]; // 'caltrop' or 'snipe_shot'
+      if (!chargeKey) continue;
+      // Check if player has this boost unlocked (slot exists)
+      const slotIdx = ps.slots.findIndex(sl => sl.id === chargeKey);
+      if (slotIdx < 0) continue;
+      const sl = ps.slots[slotIdx];
+      const maxCharges = BOOST_CONFIG.actives[chargeKey]?.maxCharges ?? 3;
+      if (sl.uses < maxCharges) {
+        sl.uses++;
+        pu.collectedByPlayer[ps.idx] = true;
+        s.events.push({ type: 'pickup_collected', playerIdx: ps.idx, pickupType: pu.type });
+      }
+    }
   }
 }
 
@@ -174,25 +331,13 @@ function _handleCollision(s, ps, obsIdx) {
     return;
   }
 
-  // Ice or water: check if phase is pre-armed
-  const phaseSlot = ps.slots[2]; // slot 2 = phase
-  if (phaseSlot && phaseSlot.id === 'phase' && phaseSlot.uses > 0 &&
-      (ps.boostKeyHeld[2] || ps.boostPressTimer[2] > 0)) {
-    // Phase through ice/water
-    phaseSlot.uses--; ps.boostUseCount.phase++;
-    ps.boostPressTimer[2] = 0;
-    obs.hitByPlayer[ps.idx] = true;
-    s.events.push({ type: 'phase', playerIdx: ps.idx, obsLane: obs.lane, obsDistScaled: obs.distanceScaled });
-    ps.drawAlpha = 0.4; ps.drawAlphaTicksLeft = PHASE_ALPHA_TICKS;
-    return;
-  }
+  // Ice or water (including caltrops which have type 'ice'):
+  // BENCHED: phase check removed from here
+  // if (phaseSlot && phaseSlot.id === 'phase' && phaseSlot.uses > 0 && ...) { ... }
 
   // Normal ice/water hit: apply debuff based on passive level
   obs.hitByPlayer[ps.idx] = true;
   if (obs.type === 'ice') {
-    const level = ps.passives?.ice_grip ?? 0;
-    // Only apply debuff if we have no full immunity (no level gives full immunity by default)
-    // Level 2 = 75% = still debuffed but faster, so always apply debuff
     _applyDebuff(ps, 'ice');
   }
   if (obs.type === 'water') {
@@ -223,8 +368,7 @@ function _enterReactive(s, ps, obsIdx) {
 }
 
 function _tryReactiveBoost(s, ps, slotIdx) {
-  // Phase (slot 2) is explicitly NOT allowed in the reactive window
-  if (slotIdx === 2) return;
+  // BENCHED: phase (slot 2) is explicitly not allowed in reactive window
   const sl = ps.slots[slotIdx];
   if (!sl || !sl.isActive || !sl.isReactive || sl.uses <= 0) return;
   if (ps.reactiveObsIdx < 0) return;

@@ -3,9 +3,10 @@
 
 const DEADZONE     = 0.5;
 const AXIS_X       = 0;    // left stick horizontal
-const BTN_A        = 0;    // boost slot 0
-const BTN_B        = 1;    // boost slot 2
-const BTN_X        = 2;    // boost slot 1
+const BTN_A        = 0;    // boost slot 0 (rock_break)
+const BTN_B        = 1;    // boost slot 2 (caltrop)
+const BTN_X        = 2;    // boost slot 1 (sprint)
+const BTN_Y        = 3;    // boost slot 3 (snipe_shot)
 const BTN_DPAD_L   = 14;
 const BTN_DPAD_R   = 15;
 
@@ -60,10 +61,11 @@ export class GamepadInput {
       this._checkButtonLane(pad, st, BTN_DPAD_R, simTick, playerSlot, 'lane_right', intents);
 
       // ── Face buttons — boost_down / boost_up ─────────────────────────────
-      // A=slot0, X=slot1, B=slot2
+      // A=slot0(rock_break), X=slot1(sprint), B=slot2(caltrop), Y=slot3(snipe_shot)
       this._checkButtonBoost(pad, st, BTN_A, 0, simTick, playerSlot, intents);
       this._checkButtonBoost(pad, st, BTN_X, 1, simTick, playerSlot, intents);
       this._checkButtonBoost(pad, st, BTN_B, 2, simTick, playerSlot, intents);
+      this._checkButtonBoost(pad, st, BTN_Y, 3, simTick, playerSlot, intents);
     }
 
     return intents;
@@ -92,7 +94,7 @@ export class GamepadInput {
     const st = this._padStates[padIndex];
     if (!st) return intents;
     // Release any held boost buttons
-    for (const [btnIdx, boostSlot] of [[BTN_A, 0], [BTN_X, 1], [BTN_B, 2]]) {
+    for (const [btnIdx, boostSlot] of [[BTN_A, 0], [BTN_X, 1], [BTN_B, 2], [BTN_Y, 3]]) {
       if (st.prevButtons[btnIdx]) {
         intents.push({ tick: simTick, playerSlot, type: 'boost_up', slot: boostSlot });
         st.prevButtons[btnIdx] = false;

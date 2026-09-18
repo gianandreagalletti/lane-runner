@@ -1,7 +1,7 @@
 // Render helpers for RunScene. Extracted to keep RunScene.js under 300 lines.
 import { CANVAS_W, CANVAS_H, LANE_CENTERS } from './track.js';
 import { CENTI_SCALE, GAP_WARNING_CU } from '../sim/rules.js';
-import { rockBreakEffect, phaseEffect } from './effects.js';
+import { rockBreakEffect, phaseEffect, snipeHitEffect } from './effects.js';
 import { PROJ, LANE_TU, project } from './render/projection.js';
 
 export function renderReactiveOverlay1P(overlay, text, state) {
@@ -85,6 +85,10 @@ export function handleSimEvents(scene, state, playerObjs) {
       rockBreakEffect(scene, { screenY: obsScreenY }, obsX);
     } else if (ev.type === 'phase') {
       phaseEffect(scene, playerObjs[ev.playerIdx], { screenY: obsScreenY }, obsX);
+    } else if (ev.type === 'snipe_hit') {
+      // Brief flash on the hit player
+      const hitPlayer = playerObjs[ev.playerIdx];
+      if (hitPlayer) snipeHitEffect(scene, hitPlayer);
     } else if (ev.type === 'death_shake') {
       scene.cameras.main.shake(110, 0.022);
     } else if (ev.type === 'left_behind') {

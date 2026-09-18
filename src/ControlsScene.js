@@ -37,17 +37,25 @@ export class ControlsScene extends Phaser.Scene {
     };
 
     section('── PLAYER 1  (1P or 2P left half)', [
-      ['[A]  /  [D]',         'Switch lane left / right'],
-      ['[1]  [2]  [3]',       'Activate boost in that loadout slot']
+      ['[A]  /  [D]',              'Switch lane left / right'],
+      ['[1]  Rock Break',          'Slot 0 — reactive: destroys rock (hold to arm)'],
+      ['[2]  Sprint',              'Slot 1 — +40% speed for 4s'],
+      ['[3]  Caltrop',             'Slot 2 — place ice trap behind you'],
+      ['[4]  Snipe Shot',          'Slot 3 — fire a shot forward in your lane']
     ]);
 
     section('── PLAYER 2  (2P right half only)', [
-      ['[←]  /  [→]',         'Switch lane left / right'],
-      ['[8]  [9]  [0]',       'Activate boost in that loadout slot']
+      ['[←]  /  [→]',             'Switch lane left / right'],
+      ['[8] [9] [0] [7]',         'Slots 0–3 (same mapping as P1)']
+    ]);
+
+    section('── PLAYER 3  (3P only)', [
+      ['[Q]  /  [E]',             'Switch lane left / right'],
+      ['[I] [O] [P] [U]',         'Slots 0–3']
     ]);
 
     section('── 1P EXTRA', [
-      ['[←]  /  [→]',         'Also switch lane (same as A / D in 1P)']
+      ['[←]  /  [→]',             'Also switch lane (same as A / D in 1P)']
     ]);
 
     section('── PLANNING SCREEN', [
@@ -57,8 +65,11 @@ export class ControlsScene extends Phaser.Scene {
     ]);
 
     section('── DURING A RUN', [
-      ['REACT! banner',        '250ms window when a lethal rock is incoming'],
-      ['  → press boost key',  'Use a reactive boost (Rock Break / Phase) to survive']
+      ['REACT! banner',        '450ms window when a lethal rock is incoming'],
+      ['  → press [1]',        'Rock Break — destroys rock, saves your run'],
+      ['Draft (» »)',          'Sit within 150 units behind another player for +8% speed'],
+      ['Caltrop',              'Placed at your position—200u; triggers ice slow on contact'],
+      ['Snipe Shot',           'Projectile travels forward at 9×base speed; slows on hit']
     ]);
 
     section('── RESULT SCREEN', [

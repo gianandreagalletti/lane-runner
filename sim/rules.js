@@ -35,5 +35,18 @@ export const GAP_WARNING_CU         = 450 * CENTI_SCALE;  // 45000 cu = 450 disp
 export const COL_HALF_Y_SCALED      = 1500; // (OBS_H/2+20)×CENTI_SCALE = 15×100 (collision half-height in cu)
 export const COL_HALF_X             =  100; // OBS_W/2+20 = 100px
 
+// Draft slipstream (centi-units)
+export const DRAFT_RANGE_CU     = 150 * CENTI_SCALE;  // 15000 cu
+export const DRAFT_FACTOR       = 108;                 // integer percent
+
+// Snipe shot projectile
+export const SNIPE_SPEED_CU     = 900;   // cu/tick
+export const SNIPE_LIFETIME     = 300;   // ticks
+export const SNIPE_FACTOR       = 65;    // speed factor on hit (integer percent)
+export const SNIPE_DEBUFF_TICKS = 120;   // 2s
+
+// Pickup types → charge key mapping
+export const PICKUP_TYPES = { caltrop_pickup: 'caltrop', snipe_pickup: 'snipe_shot' };
+
 // For tuning UI only — never call this in gameplay
 export function ticksToMs(ticks) { return Math.round(ticks * 1000 / TICK_RATE); }

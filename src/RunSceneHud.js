@@ -6,32 +6,35 @@ import { PLAYER_COLOR_HEX } from './controls.js';
 const ARMED_STROKE          = 0xFFDD00;
 const UNARMED_STROKE_REACT  = 0x554422;
 
-// Fixed canonical slot order: 0=rock_break, 1=sprint, 2=phase
-const SLOT_IDS = ['rock_break', 'sprint', 'phase'];
+// Fixed canonical slot order: 0=rock_break, 1=sprint, 2=caltrop, 3=snipe_shot
+// BENCHED: phase removed
+const SLOT_IDS = ['rock_break', 'sprint', 'caltrop', 'snipe_shot'];
 
 export function buildHud1P(scene, slots) {
-  const spacing = 226, startX = CANVAS_W / 2 - spacing;
+  // 4 slots — spread evenly
+  const spacing = 170, startX = CANVAS_W / 2 - spacing * 1.5;
   const chipRefs = [];
-  // Always render exactly 3 fixed slots
+  // Always render exactly 4 fixed slots
   SLOT_IDS.forEach((id, i) => {
     const x = startX + i * spacing;
     const boost = BOOSTS[id];
     const isReactive = id === 'rock_break';
-    const chip  = scene.add.rectangle(x, 22, 210, 30, 0x201610)
+    const chip  = scene.add.rectangle(x, 22, 158, 30, 0x201610)
       .setStrokeStyle(1, 0x554422);
-    scene.add.text(x - 78, 22, `[${i + 1}]`, { fontSize: '11px', fontFamily: 'monospace', color: '#556677' }).setOrigin(0, 0.5);
-    const nameT = scene.add.text(x - 58, 22, boost.name, {
-      fontSize: '13px', fontFamily: 'monospace', color: '#FFCC88'
+    scene.add.text(x - 58, 22, `[${i + 1}]`, { fontSize: '11px', fontFamily: 'monospace', color: '#556677' }).setOrigin(0, 0.5);
+    const nameT = scene.add.text(x - 40, 22, boost.name, {
+      fontSize: '12px', fontFamily: 'monospace', color: '#FFCC88'
     }).setOrigin(0, 0.5);
-    const usesT = scene.add.text(x + 76, 22, 'EMPTY', {
-      fontSize: '13px', fontFamily: 'monospace', color: '#553333', stroke: '#000', strokeThickness: 2
+    const usesT = scene.add.text(x + 68, 22, 'EMPTY', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#553333', stroke: '#000', strokeThickness: 2
     }).setOrigin(1, 0.5);
     chipRefs.push({ chip, nameT, usesT, id, isReactive });
   });
   const distText  = scene.add.text(20, 14, '', { fontSize: '20px', fontFamily: 'monospace', color: '#DDDDDD', stroke: '#000', strokeThickness: 3 });
   const speedText = scene.add.text(CANVAS_W - 20, 14, '', { fontSize: '20px', fontFamily: 'monospace', color: '#FFE044', stroke: '#000', strokeThickness: 3 }).setOrigin(1, 0);
   const sprintText= scene.add.text(CANVAS_W / 2, 50, '', { fontSize: '14px', fontFamily: 'monospace', color: '#FFEE55', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5, 0);
-  return { chipRefs, distText, speedText, sprintText };
+  const draftText = scene.add.text(CANVAS_W / 2, 66, '', { fontSize: '12px', fontFamily: 'monospace', color: '#AAEEFF', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5, 0);
+  return { chipRefs, distText, speedText, sprintText, draftText };
 }
 
 // buildHudMP — works for 2 or 3 players
@@ -47,21 +50,22 @@ export function buildHudMP(scene, allSlots) {
   allSlots.forEach((slots, pidx) => {
     const pos    = positions[pidx];
     const isRight = pos.anchor === 1;
-    const chipRef0X = isRight
-      ? (CANVAS_W - 55 - 2 * chipSpacing)
-      : pos.anchor === 0.5 ? (CANVAS_W / 2 - chipSpacing) : 55;
 
     const chipRefs = [];
     const chipY = pidx === 2 ? 68 : 38;
+    // 4 slots — tighter spacing to fit
+    const chipRef0X4 = isRight
+      ? (CANVAS_W - 55 - 3 * chipSpacing)
+      : pos.anchor === 0.5 ? (CANVAS_W / 2 - chipSpacing * 1.5) : 55;
     SLOT_IDS.forEach((id, i) => {
-      const cx = chipRef0X + i * chipSpacing;
+      const cx = chipRef0X4 + i * chipSpacing;
       const boost = BOOSTS[id];
       const chip = scene.add.rectangle(cx, chipY, chipW, chipH, 0x201610).setStrokeStyle(1, 0x554422);
       const nameT = scene.add.text(cx, chipY, boost.name, {
-        fontSize: '10px', fontFamily: 'monospace', color: '#FFCC88'
+        fontSize: '9px', fontFamily: 'monospace', color: '#FFCC88'
       }).setOrigin(0.5, 0.5);
       const usesT = scene.add.text(cx + 44, chipY, 'EMPTY', {
-        fontSize: '10px', fontFamily: 'monospace', color: '#553333', stroke: '#000', strokeThickness: 2
+        fontSize: '9px', fontFamily: 'monospace', color: '#553333', stroke: '#000', strokeThickness: 2
       }).setOrigin(1, 0.5);
       chipRefs.push({ chip, nameT, usesT, id, isReactive: id === 'rock_break' });
     });
@@ -99,6 +103,7 @@ export function updateHud1P(refs, state) {
   const debuff = ps.debuffType ? `SLOWED ${_speedPct(ps)}%` : '';
   refs.speedText.setText(debuff);
   refs.sprintText.setText(ps.sprintTicksLeft > 0 ? `SPRINT ${(ps.sprintTicksLeft / 60).toFixed(1)}s` : '');
+  if (refs.draftText) refs.draftText.setText(ps.isDrafting ? '» DRAFT »' : '');
   ps.slots.forEach((slot, i) => {
     const ref = refs.chipRefs[i];
     if (!ref) return;
@@ -169,5 +174,6 @@ function _speedPct(ps) {
     if (level >= 1) return BOOST_CONFIG.passives.water_shield.levels[0].factorPct;
     return BOOST_CONFIG.passives.water_shield.baseFactorPct;
   }
+  if (ps.debuffType === 'snipe') return 65; // SNIPE_FACTOR — not affected by passives
   return 100;
 }

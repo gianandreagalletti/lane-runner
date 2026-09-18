@@ -1,9 +1,10 @@
 import { BOOSTS, BOOST_CONFIG } from '../src/boosts.js';
-import { CENTI_SCALE, LANE_SWITCH_TICKS } from './rules.js';
+import { CENTI_SCALE, LANE_SWITCH_TICKS, PICKUP_TYPES } from './rules.js';
 
 // Fixed canonical slot mapping (always in this order regardless of charges bought)
-// Slot 0: rock_break, Slot 1: sprint, Slot 2: phase
-const CANONICAL_SLOTS = ['rock_break', 'sprint', 'phase'];
+// Slot 0: rock_break, Slot 1: sprint, Slot 2: caltrop, Slot 3: snipe_shot
+// BENCHED: phase — was Slot 2, removed from canonical slots
+const CANONICAL_SLOTS = ['rock_break', 'sprint', 'caltrop', 'snipe_shot'];
 
 // Verify no band has rocks in all 3 lanes (hard constraint)
 function _assertNoAllRockBands(trackData) {
@@ -46,6 +47,13 @@ export function createInitialState(matchConfig, trackData) {
     pendingByPlayer: new Array(numPlayers).fill(false)
   }));
 
+  const pickups = (trackData.pickups || []).map(p => ({
+    lane:            p.lane,
+    distanceScaled:  p.distance * CENTI_SCALE,
+    type:            p.type,                              // 'caltrop_pickup' | 'snipe_pickup'
+    collectedByPlayer: new Array(numPlayers).fill(false)
+  }));
+
   const players = matchConfig.players.map(pc => {
     const loadout = pc.loadout;
 
@@ -54,7 +62,7 @@ export function createInitialState(matchConfig, trackData) {
     if (Array.isArray(loadout)) {
       // Legacy: convert array to object format
       passives = { ice_grip: 0, water_shield: 0, quick_step: 0 };
-      actives  = { rock_break: 0, sprint: 0, phase: 0 };
+      actives  = { rock_break: 0, sprint: 0, caltrop: 0, snipe_shot: 0 };
       for (const id of loadout) {
         const b = BOOSTS[id];
         if (!b) continue;
@@ -66,15 +74,15 @@ export function createInitialState(matchConfig, trackData) {
       actives  = { ...loadout.actives };
     }
 
-    // Build canonical slots (always rock_break=0, sprint=1, phase=2)
+    // Build canonical slots (rock_break=0, sprint=1, caltrop=2, snipe_shot=3)
+    // BENCHED: phase was slot 2 — removed from canonical slots
     const slots = CANONICAL_SLOTS.map(id => {
-      const b = BOOSTS[id];
       const charges = actives[id] ?? 0;
       return {
         id,
         uses:       charges,
         isActive:   true,
-        isReactive: id === 'rock_break' // only rock_break is reactive (phase is NOT)
+        isReactive: id === 'rock_break' // only rock_break is reactive
       };
     });
 
@@ -93,22 +101,23 @@ export function createInitialState(matchConfig, trackData) {
       passives,
       actives,
       slots,
-      boostUseCount:      { rock_break: 0, sprint: 0, phase: 0 },
+      boostUseCount:      { rock_break: 0, sprint: 0, caltrop: 0, snipe_shot: 0 },
       quickStepTicks,     // cached ticks for lane switch
       laneTimeTicks:      [0, 0, 0],
       reactiveTicksLeft:  0,
       reactiveObsIdx:     -1,
-      boostPressTimer:    [0, 0, 0],
-      boostKeyHeld:       [false, false, false],
+      boostPressTimer:    [0, 0, 0, 0],
+      boostKeyHeld:       [false, false, false, false],
       startTick:          0,
       gsEndTick:          -1,
       laneVisualFrom:     1,
       laneVisualTicksLeft: 0,
       drawAlpha:          1.0,
       drawAlphaTicksLeft: 0,
-      // Phase activation state (non-reactive: manually triggered)
-      phaseActive:        false,
-      phasePendingObsIdx: -1
+      isDrafting:         false,
+      // BENCHED: phase activation state — kept commented for reference
+      // phaseActive:     false,
+      // phasePendingObsIdx: -1
     };
   });
 
@@ -118,6 +127,8 @@ export function createInitialState(matchConfig, trackData) {
     trackLength:       trackData.length * CENTI_SCALE,
     numPlayers,
     obstacles,
+    pickups,
+    projectiles:       [],
     players,
     camPositionScaled: 0,
     ended:             false,
