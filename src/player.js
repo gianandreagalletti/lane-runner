@@ -100,40 +100,48 @@ export class Player {
       : 0;
 
     // --- Wake (drawn FIRST so it appears behind the vehicle) ---
-    // Peak alpha: proportional to DRAFT_MAX_BONUS/12 — changing the bonus changes wake intensity
-    const peakAlpha = (DRAFT_MAX_BONUS / 12) * 0.18;
-    const wakeW_near = BILL_W_TU * 0.6;   // near end (just behind vehicle) wider
-    const wakeW_far  = BILL_W_TU * 0.15;  // far end (260 units behind) narrower
+    // The wake extends BACKWARD from the vehicle's rear toward the camera:
+    //   z = zRel        → vehicle's rear, brightest
+    //   z = zRel - DRAFT_RANGE_TU → 260 units behind vehicle, fades to nothing
+    // Smaller zRel = lower on screen (closer to camera) in the perspective view.
+    // Peak alpha and length both derive from the same two constants so changing
+    // DRAFT_RANGE_CU or DRAFT_MAX_BONUS moves the drawing and the effect together.
+    const peakAlpha  = (DRAFT_MAX_BONUS / 12) * 0.18;
+    const wakeW_near = BILL_W_TU * 0.6;   // at vehicle's rear — widest
+    const wakeW_far  = BILL_W_TU * 0.15;  // 260 units behind — narrowest
     const vehicleColour = VEHICLE_BODIES[vIdx];
     const NUM_STRIPS = 5;
     for (let s = 0; s < NUM_STRIPS; s++) {
       const t0 = s / NUM_STRIPS;
       const t1 = (s + 1) / NUM_STRIPS;
-      const alpha = peakAlpha * (1 - t0);  // fades toward far end
+      const alpha = peakAlpha * (1 - t0);  // strongest at t0=0 (vehicle rear), zero at t0=1
 
-      const z0 = zRel + 1 + t0 * DRAFT_RANGE_TU;
-      const z1 = zRel + 1 + t1 * DRAFT_RANGE_TU;
+      // Backward: subtract from zRel so z0/z1 < vehicle zRel (toward camera, lower on screen)
+      const z0 = zRel - t0 * DRAFT_RANGE_TU;
+      const z1 = zRel - t1 * DRAFT_RANGE_TU;
       const w0 = wakeW_near + (wakeW_far - wakeW_near) * t0;
       const w1 = wakeW_near + (wakeW_far - wakeW_near) * t1;
 
-      // Skip if behind near plane or beyond draw distance
-      if (z1 < PROJ.NEAR_CLAMP || z0 > PROJ.DRAW_DISTANCE) continue;
+      // Clip: skip strips entirely below the near plane (z1 is the farther-back edge)
+      if (z0 < PROJ.NEAR_CLAMP) continue;  // vehicle itself is behind near plane
+      const z1c = Math.max(z1, PROJ.NEAR_CLAMP);  // clamp far end to near plane
 
       const sL = project(worldX - w0 / 2, z0);
       const sR = project(worldX + w0 / 2, z0);
-      const eL = project(worldX - w1 / 2, z1);
-      const eR = project(worldX + w1 / 2, z1);
+      const eL = project(worldX - w1 / 2, z1c);
+      const eR = project(worldX + w1 / 2, z1c);
 
       g.fillStyle(vehicleColour, alpha);
       g.fillPoints([sL, sR, eR, eL], true);
     }
-    // Faint edge lines for "air disturbance" look
-    const nearL = project(worldX - wakeW_near / 2, zRel + 1);
-    const nearR = project(worldX + wakeW_near / 2, zRel + 1);
-    const farL  = project(worldX - wakeW_far  / 2, zRel + 1 + DRAFT_RANGE_TU);
-    const farR  = project(worldX + wakeW_far  / 2, zRel + 1 + DRAFT_RANGE_TU);
-    const farMid = project(worldX, zRel + 1 + DRAFT_RANGE_TU);
-    const nearMid = project(worldX, zRel + 1);
+    // Faint edge lines for "air disturbance" — same backward direction
+    const nearL   = project(worldX - wakeW_near / 2, zRel);
+    const nearR   = project(worldX + wakeW_near / 2, zRel);
+    const farZc   = Math.max(zRel - DRAFT_RANGE_TU, PROJ.NEAR_CLAMP);
+    const farL    = project(worldX - wakeW_far / 2, farZc);
+    const farR    = project(worldX + wakeW_far / 2, farZc);
+    const nearMid = project(worldX, zRel);
+    const farMid  = project(worldX, farZc);
     g.lineStyle(1, vehicleColour, peakAlpha * 0.4);
     g.beginPath(); g.moveTo(nearL.x, nearL.y); g.lineTo(farL.x, farL.y); g.strokePath();
     g.beginPath(); g.moveTo(nearR.x, nearR.y); g.lineTo(farR.x, farR.y); g.strokePath();
