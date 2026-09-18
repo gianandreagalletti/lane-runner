@@ -2,54 +2,173 @@
  * Multi-player shop panels for PlanScene.
  * Exports buildShopPicker(scene, data) — called from PlanScene when mode !== '1p'.
  *
- * Each player drives their own panel with dedicated keys:
- *   P1: A/D to navigate rows, W/S to inc/dec, F to confirm
- *   P2: LEFT/RIGHT to navigate rows, UP/DOWN to inc/dec, RSHIFT to confirm
- *   P3: NUMPAD_FOUR/SIX to navigate, NUMPAD_EIGHT/FIVE to inc/dec, NUMPAD_ZERO to confirm
+ * Each player drives their own panel with dedicated keys from BINDINGS:
+ *   P1: W/S navigate rows, A/D step value, F confirm
+ *   P2: UP/DOWN navigate rows, LEFT/RIGHT step value, ENTER confirm
+ *   P3: I/K navigate rows, Q/E step value, H confirm
+ *
+ * Gamepad: left-stick Y / d-pad up-down navigates rows,
+ *          left-stick X / d-pad left-right steps values,
+ *          A confirms, B un-confirms.
  *
  * data = {
  *   n: 2|3,
  *   progresses: [prog1, prog2, prog3?],
- *   playerKeys: [{ left, right, inc, dec, confirm }, ...],
- *   onReady: (pidx, loadout) => void,   // called per-player when they confirm
- *   x0: number,   // left edge of shop area (map takes 0..x0)
- *   y0: number,   // top y
+ *   claims: [{inputSource, padIndex?}, ...],   // from JoinScene
+ *   onReady: (pidx, loadout) => void,
+ *   x0: number,
+ *   y0: number,
  *   panelW: number
  * }
  */
 
 import { BOOSTS, BOOST_CONFIG } from './boosts.js';
-
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
+import { BINDINGS, KEY_DISPLAY } from './controls.js';
 
 const PASSIVE_IDS = ['ice_grip', 'water_shield', 'quick_step'];
 // BENCHED: phase removed from shop
 const ACTIVE_IDS  = ['rock_break', 'sprint', 'caltrop', 'snipe_shot'];
 const ROW_IDS     = [...PASSIVE_IDS, ...ACTIVE_IDS];
 
+// Map a BINDINGS key name to the Phaser key code string used with addKey.
+// Letter keys like 'A' map to Phaser.Input.Keyboard.KeyCodes.A (which works with string 'A').
+// Named keys like 'LEFT', 'UP', 'ENTER' etc. work directly as Phaser key code names.
+function _phaserKeyName(bindingName) {
+  // All entries in BINDINGS that aren't single letters are already valid Phaser KeyCode names.
+  // Single uppercase letters are also valid Phaser KeyCode names.
+  return bindingName;
+}
+
+// Build Phaser Key objects for a player's shop bindings (up, down, left, right, confirm).
+function _makeKeys(scene, pidx) {
+  const b = BINDINGS[`p${pidx + 1}`];
+  const kb = scene.input.keyboard;
+  return {
+    up:      kb.addKey(b.up),
+    down:    kb.addKey(b.down),
+    left:    kb.addKey(b.left),
+    right:   kb.addKey(b.right),
+    confirm: kb.addKey(b.confirm)
+  };
+}
+
 export function buildShopPicker(scene, data) {
-  const { n, progresses, playerKeys, onReady, x0, y0, panelW } = data;
+  const { n, progresses, claims, onReady, x0, y0, panelW } = data;
   const PASSIVE_BUDGET = BOOST_CONFIG.PASSIVE_POINTS;
   const ACTIVE_BUDGET  = BOOST_CONFIG.ACTIVE_POINTS;
+
+  // Prevent browser from scrolling when arrow keys are pressed
+  scene.input.keyboard.addCapture(['UP', 'DOWN', 'LEFT', 'RIGHT']);
+
+  // Per-slot gamepad nav state for edge detection
+  const padNavStates = Array.from({ length: n }, () => ({
+    yArmed: true, xArmed: true, prevA: false, prevB: false
+  }));
+
+  // Store panel action functions so update() can call them
+  const panelActions = [];
 
   const readyFlags = new Array(n).fill(false);
 
   for (let pidx = 0; pidx < n; pidx++) {
-    const px = x0 + pidx * panelW;
-    const cx = px + panelW / 2;
-    _buildPanel(scene, pidx, cx, px, panelW, y0,
-      PASSIVE_BUDGET, ACTIVE_BUDGET, playerKeys[pidx],
+    const px   = x0 + pidx * panelW;
+    const cx   = px + panelW / 2;
+    const keys = _makeKeys(scene, pidx);
+    const claim = claims ? claims[pidx] : null;
+
+    const actions = _buildPanel(
+      scene, pidx, cx, px, panelW, y0,
+      PASSIVE_BUDGET, ACTIVE_BUDGET,
+      keys, claim,
       (loadout) => {
         readyFlags[pidx] = true;
         onReady(pidx, loadout);
       }
     );
+    panelActions.push(actions);
   }
+
+  // Store update callback on scene for gamepad polling
+  scene._shopUpdate = function () {
+    if (!scene.input.gamepad) return;
+    for (let i = 0; i < n; i++) {
+      const claim = claims ? claims[i] : null;
+      if (!claim || claim.inputSource !== 'pad') continue;
+      const pad = scene.input.gamepad.getPad(claim.padIndex);
+      if (!pad) continue;
+
+      const padState  = padNavStates[i];
+      const actions   = panelActions[i];
+
+      // Up/down navigation — left stick Y or d-pad
+      const axisY   = typeof pad.axes[1]?.getValue === 'function'
+        ? pad.axes[1].getValue() : (pad.axes[1] ?? 0);
+      const dpadUp   = (pad.buttons[12]?.value ?? 0) > 0.5;
+      const dpadDown = (pad.buttons[13]?.value ?? 0) > 0.5;
+      const navUp    = axisY < -0.5 || dpadUp;
+      const navDown  = axisY >  0.5 || dpadDown;
+
+      if (!padState.yArmed) {
+        if (!navUp && !navDown) padState.yArmed = true;
+      } else {
+        if (navUp)        { actions.moveRow(-1); padState.yArmed = false; }
+        else if (navDown) { actions.moveRow(+1); padState.yArmed = false; }
+      }
+
+      // Left/right value stepping — left stick X or d-pad
+      const axisX    = typeof pad.axes[0]?.getValue === 'function'
+        ? pad.axes[0].getValue() : (pad.axes[0] ?? 0);
+      const dpadLeft  = (pad.buttons[14]?.value ?? 0) > 0.5;
+      const dpadRight = (pad.buttons[15]?.value ?? 0) > 0.5;
+      const navLeft   = axisX < -0.5 || dpadLeft;
+      const navRight  = axisX >  0.5 || dpadRight;
+
+      if (!padState.xArmed) {
+        if (!navLeft && !navRight) padState.xArmed = true;
+      } else {
+        if (navLeft)        { actions.stepValue(-1); padState.xArmed = false; }
+        else if (navRight)  { actions.stepValue(+1); padState.xArmed = false; }
+      }
+
+      // A = confirm, B = un-confirm
+      const aDown = (pad.buttons[0]?.value ?? 0) > 0.5;
+      const bDown = (pad.buttons[1]?.value ?? 0) > 0.5;
+      if (aDown && !padState.prevA) actions.confirm();
+      if (bDown && !padState.prevB) actions.unconfirm();
+      padState.prevA = aDown;
+      padState.prevB = bDown;
+    }
+  };
+
+  // Hook keyboard JustDown polling into scene's update by adding a recurring check.
+  // We use Phaser's update event rather than a custom loop so it fires every frame.
+  scene.events.on('update', () => {
+    // Keyboard: check JustDown for each player's keys
+    for (let i = 0; i < n; i++) {
+      const actions = panelActions[i];
+      const b = BINDINGS[`p${i + 1}`];
+      const kb = scene.input.keyboard;
+      // addKey returns the same object if already added — safe to call per frame
+      const upKey      = kb.addKey(b.up);
+      const downKey    = kb.addKey(b.down);
+      const leftKey    = kb.addKey(b.left);
+      const rightKey   = kb.addKey(b.right);
+      const confirmKey = kb.addKey(b.confirm);
+
+      if (Phaser.Input.Keyboard.JustDown(upKey))      actions.moveRow(-1);
+      if (Phaser.Input.Keyboard.JustDown(downKey))    actions.moveRow(+1);
+      if (Phaser.Input.Keyboard.JustDown(leftKey))    actions.stepValue(-1);
+      if (Phaser.Input.Keyboard.JustDown(rightKey))   actions.stepValue(+1);
+      if (Phaser.Input.Keyboard.JustDown(confirmKey)) actions.confirm();
+    }
+
+    // Gamepad polling
+    scene._shopUpdate();
+  });
 }
 
 function _buildPanel(scene, pidx, cx, px, panelW, y0,
-  PASSIVE_BUDGET, ACTIVE_BUDGET, keys, onConfirm) {
+  PASSIVE_BUDGET, ACTIVE_BUDGET, keys, claim, onConfirm) {
 
   const playerColors = ['#AABBCC', '#E8A33D', '#4FD1C5'];
   const col = playerColors[pidx];
@@ -65,9 +184,15 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
     fontSize: '14px', fontFamily: 'monospace', color: col
   }).setOrigin(0.5, 0);
 
-  const keysHint = keys
-    ? `${keys.left}/${keys.right}: row  ${keys.inc}/${keys.dec}: value  ${keys.confirm}: confirm`
-    : '';
+  // Controls hint (show actual input device)
+  let keysHint;
+  if (claim && claim.inputSource === 'pad') {
+    keysHint = '↑↓:row  ←→:val  [A]:confirm';
+  } else {
+    const b = BINDINGS[`p${pidx + 1}`];
+    const kd = KEY_DISPLAY;
+    keysHint = `${kd[b.up]}/${kd[b.down]}:row  ${kd[b.left]}/${kd[b.right]}:val  ${kd[b.confirm]}:ok`;
+  }
   scene.add.text(cx, y0 + 22, keysHint, {
     fontSize: '9px', fontFamily: 'monospace', color: '#445566'
   }).setOrigin(0.5, 0);
@@ -90,8 +215,8 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
 
   // Row Y positions (7 rows: 3 passive + 4 active)
   const rowY = [
-    y0 + 90,  y0 + 116, y0 + 142,  // passives
-    y0 + 198, y0 + 224, y0 + 250, y0 + 276  // actives (4 rows now, BENCHED: phase)
+    y0 + 90,  y0 + 116, y0 + 142,        // passives
+    y0 + 198, y0 + 224, y0 + 250, y0 + 276  // actives
   ];
 
   const rowRefs = [];
@@ -101,32 +226,52 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
     const id  = ROW_IDS[ri];
     const boost = BOOSTS[id];
 
-    const nameT  = scene.add.text(px + 6, ry, boost.name, {
-      fontSize: '12px', fontFamily: 'monospace', color: isP ? '#DDEEFF' : '#FFDDB0'
+    // Clip name text to roughly left 40% of panel
+    const nameMaxW = Math.floor(panelW * 0.42);
+    const nameT = scene.add.text(px + 6, ry, boost.name, {
+      fontSize: '11px', fontFamily: 'monospace', color: isP ? '#DDEEFF' : '#FFDDB0',
+      wordWrap: { width: nameMaxW, useAdvancedWrap: false }
     }).setOrigin(0, 0.5);
+
     const valT = scene.add.text(cx, ry, '0', {
       fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF'
     }).setOrigin(0.5, 0.5);
-    const infoT = scene.add.text(cx + panelW * 0.32, ry, '', {
-      fontSize: '9px', fontFamily: 'monospace', color: '#445566'
-    }).setOrigin(0, 0.5);
+
+    // [-] and [+] mouse steppers — positioned within panel
+    const decX = cx - 22;
+    const incX = cx + 22;
+    const decBtn = scene.add.text(decX, ry, '[-]', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#AA6644'
+    }).setOrigin(0.5, 0.5).setInteractive({ useHandCursor: true });
+    const incBtn = scene.add.text(incX, ry, '[+]', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#44AA66'
+    }).setOrigin(0.5, 0.5).setInteractive({ useHandCursor: true });
+
+    decBtn.on('pointerdown', () => { if (!confirmed) { _dec(ri); } });
+    incBtn.on('pointerdown', () => { if (!confirmed) { _inc(ri); } });
+
     // Cursor indicator
     const cursorGfx = scene.add.graphics();
 
-    rowRefs.push({ id, isP, nameT, valT, infoT, cursorGfx });
+    rowRefs.push({ id, isP, nameT, valT, decBtn, incBtn, cursorGfx });
   }
 
+  // Empty loadout warning
+  const emptyWarnT = scene.add.text(cx, y0 + 290, 'NO BOOSTS SELECTED', {
+    fontSize: '10px', fontFamily: 'monospace', color: '#FFDD00'
+  }).setOrigin(0.5, 0).setVisible(false);
+
   // Status + confirm button
-  const statusT = scene.add.text(cx, y0 + 300, '', {
+  const statusT = scene.add.text(cx, y0 + 304, '', {
     fontSize: '11px', fontFamily: 'monospace', color: '#667788'
   }).setOrigin(0.5, 0);
-  const btnBg = scene.add.rectangle(cx, y0 + 324, panelW - 16, 36, 0x0a1410)
+  const btnBg = scene.add.rectangle(cx, y0 + 328, panelW - 16, 34, 0x0a1410)
     .setInteractive({ useHandCursor: true })
     .setStrokeStyle(2, 0x223322);
-  const btnT = scene.add.text(cx, y0 + 324, 'CONFIRM', {
-    fontSize: '16px', fontFamily: 'monospace', color: '#2A5535'
+  const btnT = scene.add.text(cx, y0 + 328, 'CONFIRM', {
+    fontSize: '15px', fontFamily: 'monospace', color: '#2A5535'
   }).setOrigin(0.5);
-  btnBg.on('pointerdown', () => { if (!confirmed) _confirm(); });
+  btnBg.on('pointerdown', () => { if (!confirmed) _doConfirm(); });
 
   const confirmText = scene.add.text(cx, y0 + 348, '', {
     fontSize: '10px', fontFamily: 'monospace', color: '#44AA66'
@@ -138,59 +283,49 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
     const pLeft  = PASSIVE_BUDGET - pSpent;
     const aLeft  = ACTIVE_BUDGET  - aSpent;
 
+    // Highlight remaining budget prominently when fully unspent
+    const pFull = pLeft === PASSIVE_BUDGET;
+    const aFull = aLeft === ACTIVE_BUDGET;
     pBudgetT.setText(`P.pts: ${pLeft}/${PASSIVE_BUDGET}`);
-    pBudgetT.setColor(pLeft < 0 ? '#FF4444' : '#66BBFF');
+    pBudgetT.setColor(pLeft < 0 ? '#FF4444' : pFull ? '#FFDD00' : '#66BBFF');
     aBudgetT.setText(`A.pts: ${aLeft}/${ACTIVE_BUDGET}`);
-    aBudgetT.setColor(aLeft < 0 ? '#FF4444' : '#FFAA44');
+    aBudgetT.setColor(aLeft < 0 ? '#FF4444' : aFull ? '#FFDD00' : '#FFAA44');
 
     for (let ri = 0; ri < 7; ri++) {
       const ref = rowRefs[ri];
       const { id, isP } = ref;
 
-      let valStr, infoStr;
+      let valStr;
       if (isP) {
         const level = passiveLevels[id];
-        const cfg = BOOST_CONFIG.passives[id];
         valStr = `L${level}`;
         ref.valT.setColor(level > 0 ? '#AAFFCC' : '#888888');
-
-        if (level === 0) {
-          infoStr = id === 'quick_step' ? `base ${cfg.baseTicks}t` : `base ${cfg.baseFactorPct}%`;
-        } else {
-          const lcfg = cfg.levels[level - 1];
-          infoStr = id === 'quick_step'
-            ? (lcfg.ticks === 0 ? 'instant' : `${lcfg.ticks}t`)
-            : `${lcfg.factorPct}%`;
-        }
       } else {
         const charges = activeCharges[id];
         valStr = `x${charges}`;
         ref.valT.setColor(charges > 0 ? '#FFCCAA' : '#888888');
-        infoStr = charges > 0 ? `${charges} charge${charges > 1 ? 's' : ''}` : 'none';
       }
-
       ref.valT.setText(valStr);
-      ref.infoT.setText(infoStr);
 
       // Draw cursor
       ref.cursorGfx.clear();
       if (ri === cursorRow && !confirmed) {
-        ref.cursorGfx.lineStyle(2, pidx === 0 ? 0xFFDD00 : pidx === 1 ? 0xFFAA44 : 0x44FFCC, 0.9);
+        const cursorColor = pidx === 0 ? 0xFFDD00 : pidx === 1 ? 0xFFAA44 : 0x44FFCC;
+        ref.cursorGfx.lineStyle(2, cursorColor, 0.9);
         ref.cursorGfx.strokeRect(px + 2, rowY[ri] - 9, panelW - 4, 18);
       }
     }
+
+    // Empty loadout warning
+    const hasAny = Object.values(passiveLevels).some(v => v > 0) ||
+                   Object.values(activeCharges).some(v => v > 0);
+    emptyWarnT.setVisible(!hasAny && !confirmed);
 
     const canConfirm = pLeft >= 0 && aLeft >= 0;
     btnBg.setStrokeStyle(2, canConfirm ? 0x44AA66 : 0x332211);
     btnT.setColor(canConfirm ? '#55EE88' : '#2A5535');
     statusT.setText(confirmed ? 'READY!' : (canConfirm ? 'Press confirm' : 'Over budget!'));
     statusT.setColor(confirmed ? '#44FF88' : (canConfirm ? '#445566' : '#CC4444'));
-  };
-
-  const _getValue = (ri) => {
-    const id = ROW_IDS[ri];
-    if (ri < 3) return passiveLevels[id];
-    return activeCharges[id];
   };
 
   const _inc = (ri) => {
@@ -225,7 +360,7 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
     refresh();
   };
 
-  const _confirm = () => {
+  const _doConfirm = () => {
     if (confirmed) return;
     const pLeft = PASSIVE_BUDGET - _passiveSpent(passiveLevels);
     const aLeft = ACTIVE_BUDGET  - _activeSpent(activeCharges);
@@ -233,6 +368,8 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
     confirmed = true;
     confirmText.setText('LOCKED IN');
     btnBg.setFillStyle(0x0e2814);
+    // Clear cursor highlight
+    for (const ref of rowRefs) ref.cursorGfx.clear();
     refresh();
     onConfirm({
       passives: { ...passiveLevels },
@@ -240,30 +377,34 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
     });
   };
 
-  // Keyboard input
-  if (keys) {
-    scene.input.keyboard.on('keydown', e => {
-      if (confirmed) return;
-      if (e.code === `Key${keys.left}` || e.key === keys.left || e.code === keys.left) {
-        cursorRow = Math.max(0, cursorRow - 1);
-        refresh();
-      } else if (e.code === `Key${keys.right}` || e.key === keys.right || e.code === keys.right) {
-        cursorRow = Math.min(6, cursorRow + 1);
-        refresh();
-      } else if (e.code === `Key${keys.inc}` || e.key === keys.inc || e.code === keys.inc ||
-                 e.code === keys.inc) {
-        _inc(cursorRow);
-      } else if (e.code === `Key${keys.dec}` || e.key === keys.dec || e.code === keys.dec ||
-                 e.code === keys.dec) {
-        _dec(cursorRow);
-      } else if (e.code === `Key${keys.confirm}` || e.key === keys.confirm ||
-                 e.code === keys.confirm || e.key === keys.confirm) {
-        _confirm();
-      }
-    });
-  }
+  const _doUnconfirm = () => {
+    if (!confirmed) return;
+    confirmed = false;
+    confirmText.setText('');
+    btnBg.setFillStyle(0x0a1410);
+    refresh();
+  };
+
+  const _moveRow = (dir) => {
+    if (confirmed) return;
+    cursorRow = Math.max(0, Math.min(6, cursorRow + dir));
+    refresh();
+  };
+
+  const _stepValue = (dir) => {
+    if (dir > 0) _inc(cursorRow);
+    else          _dec(cursorRow);
+  };
 
   refresh();
+
+  // Return action functions for external callers (gamepad / update loop)
+  return {
+    moveRow:    _moveRow,
+    stepValue:  _stepValue,
+    confirm:    _doConfirm,
+    unconfirm:  _doUnconfirm
+  };
 }
 
 function _passiveSpent(passiveLevels) {
@@ -278,7 +419,6 @@ function _passiveSpent(passiveLevels) {
 
 function _activeSpent(activeCharges) {
   let spent = 0;
-  // BENCHED: phase removed — ACTIVE_IDS now = rock_break, sprint, caltrop, snipe_shot
   for (const id of ACTIVE_IDS) {
     spent += BOOST_CONFIG.actives[id].costPerCharge * (activeCharges[id] ?? 0);
   }

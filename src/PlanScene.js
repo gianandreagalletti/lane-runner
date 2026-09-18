@@ -3,6 +3,7 @@ import { CANVAS_W, CANVAS_H, LANE_COLORS, OBS_COLORS } from './track.js';
 import { BOOSTS, BOOST_CONFIG } from './boosts.js';
 import { loadProgress } from './progression.js';
 import { buildShopPicker } from './PlanScene2P.js';
+import { BINDINGS } from './controls.js';
 
 const MAP_TOP_1P = 85, MAP_BOTTOM_1P = 618;
 const MAP_TOP_2P = 60, MAP_BOTTOM_2P = 300;
@@ -39,9 +40,9 @@ export class PlanScene extends Phaser.Scene {
       div.lineBetween(596, 8, 596, CANVAS_H - 8);
       this._drawMap(MAP_TOP_1P, MAP_BOTTOM_1P);
       this._drawShop();
-      this.input.keyboard.on('keydown', e => {
-        if (e.key === 'Enter') this._tryStart();
-        if (e.key === 'Escape') this.scene.start('MenuScene', { mode: this.mode });
+      this.input.keyboard.on(`keydown-${BINDINGS.p1.confirm}`, () => this._tryStart());
+      this.input.keyboard.on(`keydown-${BINDINGS.global.back}`, () => {
+        this.scene.start('MenuScene', { mode: this.mode });
       });
     }
   }
@@ -52,12 +53,6 @@ export class PlanScene extends Phaser.Scene {
     const progressP3 = this.mode === '3p' ? loadProgress('p3') : null;
 
     const n = this.mode === '3p' ? 3 : 2;
-    const playerKeys = [
-      { left: 'A', right: 'D', inc: 'W', dec: 'S', confirm: 'F' },
-      { left: 'LEFT', right: 'RIGHT', inc: 'UP', dec: 'DOWN', confirm: 'RSHIFT' },
-      { left: 'NUMPAD_FOUR', right: 'NUMPAD_SIX', inc: 'NUMPAD_EIGHT', dec: 'NUMPAD_FIVE', confirm: 'NUMPAD_ZERO' }
-    ];
-
     const loadouts = [null, null, null];
 
     const onReady = (pidx, loadout) => {
@@ -80,13 +75,13 @@ export class PlanScene extends Phaser.Scene {
     buildShopPicker(this, {
       n,
       progresses: [progressP1, progressP2, progressP3],
-      playerKeys: playerKeys.slice(0, n),
+      claims: this._claims || Array.from({ length: n }, () => ({ inputSource: 'keyboard' })),
       onReady,
       x0: 640, y0: 50,
       panelW: (CANVAS_W - 640) / n
     });
 
-    this.input.keyboard.on('keydown-ESC', () => {
+    this.input.keyboard.on(`keydown-${BINDINGS.global.back}`, () => {
       this.scene.start('MenuScene', { mode: this.mode });
     });
   }
@@ -168,7 +163,7 @@ export class PlanScene extends Phaser.Scene {
       fontSize: '20px', fontFamily: 'monospace', color: '#AABBCC'
     }).setOrigin(0.5, 0);
 
-    this.add.text(cx, 68, 'ENTER = confirm  ·  ESC = back', {
+    this.add.text(cx, 68, `${BINDINGS.p1.confirm} = confirm  ·  ${BINDINGS.global.back} = back`, {
       fontSize: '12px', fontFamily: 'monospace', color: '#334455'
     }).setOrigin(0.5, 0);
 
@@ -347,7 +342,7 @@ export class PlanScene extends Phaser.Scene {
                           Object.values(activeCharges).some(v => v > 0);
       startBg.setStrokeStyle(2, hasAnything ? 0x44AA66 : 0x223322);
       startText.setColor(hasAnything ? '#55EE88' : '#2A5535');
-      hintT.setText(pLeft >= 0 && aLeft >= 0 ? 'ENTER = start' : 'Over budget!');
+      hintT.setText(pLeft >= 0 && aLeft >= 0 ? `${BINDINGS.p1.confirm} = start` : 'Over budget!');
       hintT.setColor(pLeft >= 0 && aLeft >= 0 ? '#445566' : '#CC4444');
     };
 

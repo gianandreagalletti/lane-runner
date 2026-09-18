@@ -1,3 +1,67 @@
+# Session 8 — Loadout Screen Input Fix (P2/P3 Keyboard + Gamepad)
+
+## Bug cause
+
+Events DID arrive (the keyboard listener was registered for all players), but were
+DISCARDED for P2 and P3. The `_buildPanel` keyboard handler used:
+
+```js
+e.code === `Key${keys.left}`   // e.g. 'KeyLEFT' — never matches; ArrowLeft is 'ArrowLeft'
+e.code === keys.left           // e.g. 'LEFT' — never matches
+e.key  === keys.left           // e.g. 'LEFT' — never matches; actual e.key is 'ArrowLeft'
+```
+
+For P1's letter keys (`keys.left = 'A'`), the first pattern produces `'KeyA'` which
+DOES match `e.code`. That's why P1 worked and P2/P3 didn't.
+
+The old code also used a hardcoded `playerKeys` array with values like `'RSHIFT'`
+(invalid Phaser key name) and `'NUMPAD_FOUR'`/`'NUMPAD_ZERO'` (numpad, which fail on
+laptops and when NumLock is off).
+
+## Fix
+
+- **`src/controls.js`**: Added `up`, `down`, `confirm` to each player's BINDINGS entry.
+  P3 confirm = `H` (avoids conflict with `U` which is P3 boost slot 3 in RunScene).
+  P3 up/down = `I`/`K` (note: `I` is also P3 boost slot 0 — the shop is pre-run so
+  there's no conflict in context; both are correct in their respective scenes).
+  All key names verified against `node_modules/phaser/src/input/keyboard/keys/KeyCodes.js`.
+
+- **`src/PlanScene2P.js`**: Complete rewrite of input path.
+  - Replaced `e.code` string comparison with Phaser `addKey()` + `JustDown()` polled
+    via `scene.events.on('update', ...)`. This correctly handles all key name formats.
+  - Each player slot registers its own keys from `BINDINGS[p${i+1}]`, closing over `i`.
+  - All slots live simultaneously — no focus/turn system.
+  - Gamepad: edge-triggered left-stick Y/X and d-pad via `_shopUpdate()` called each frame.
+    Reads `claims[i].padIndex` to find the right pad per slot.
+  - Left/right keys step the value on the currently-highlighted row.
+  - Mouse: [-] and [+] buttons on every row are `setInteractive()` clickable.
+  - Empty loadout warning: bright yellow "NO BOOSTS SELECTED" shown when nothing spent.
+  - Unspent budget readout turns yellow when fully unspent.
+  - Removed hardcoded `playerKeys` from `buildShopPicker` API; now reads from `BINDINGS`.
+  - `claims` array passed from PlanScene so hint text shows correct device (pad/keyboard).
+
+- **`src/PlanScene.js`**:
+  - Imports `BINDINGS` from controls.js.
+  - 1P confirm/back key events now use `BINDINGS.p1.confirm` and `BINDINGS.global.back`.
+  - `_buildMultiPlayerUI` passes `claims` to `buildShopPicker`; removed `playerKeys`.
+
+- **`src/ControlsScene.js`**:
+  - Imports `BINDINGS` and `KEY_DISPLAY`; all key labels now derived from BINDINGS.
+  - Planning screen section updated to show per-player up/down/row/value/confirm keys.
+
+## Key bindings (post-fix)
+
+| Player | Lane L/R | Shop up/down | Shop value | Shop confirm | Run boosts |
+|--------|----------|-------------|------------|--------------|------------|
+| P1     | A / D    | W / S       | A / D      | F            | 1/2/3/4    |
+| P2     | ← / →    | ↑ / ↓       | ← / →      | Enter        | 8/9/0/7    |
+| P3     | Q / E    | I / K       | Q / E      | H            | I/O/P/U    |
+| Pad    | stick/dpad L/R | dpad/stick ↑↓ | dpad/stick ←→ | A button | face buttons |
+
+Arrow keys captured in PlanScene2P to prevent browser page scroll.
+
+---
+
 # Session 7 — Draft, Caltrop, Snipe Shot, Track Pickups
 
 ## Summary
