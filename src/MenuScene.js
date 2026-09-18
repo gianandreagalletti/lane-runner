@@ -147,22 +147,24 @@ export class MenuScene extends Phaser.Scene {
       fontSize: '12px', fontFamily: 'monospace', color: '#1e2e38'
     }).setOrigin(0.5);
 
-    // DEBUG toggle — slow followers (never logged, dev-only)
-    const debugOn = !!window.__lrDebug?.slowFollowers;
-    const debugBg = this.add.rectangle(CANVAS_W / 2, CANVAS_H - 60, 220, 22, debugOn ? 0x1a2200 : 0x0e0e0e)
-      .setInteractive({ useHandCursor: true })
-      .setStrokeStyle(1, debugOn ? 0x446600 : 0x222222);
-    this._debugLabel = this.add.text(CANVAS_W / 2, CANVAS_H - 60,
-      `DEBUG: SLOW FOLLOWERS [${debugOn ? 'ON' : 'OFF'}]`, {
-        fontSize: '10px', fontFamily: 'monospace', color: debugOn ? '#88CC22' : '#333333'
-      }).setOrigin(0.5);
-    debugBg.on('pointerover', () => debugBg.setFillStyle(debugOn ? 0x253300 : 0x161616));
-    debugBg.on('pointerout',  () => debugBg.setFillStyle(debugOn ? 0x1a2200 : 0x0e0e0e));
-    debugBg.on('pointerdown', () => {
-      window.__lrDebug = window.__lrDebug || {};
-      window.__lrDebug.slowFollowers = !window.__lrDebug.slowFollowers;
-      this.scene.restart({ mode: this.mode });
-    });
+    // DEBUG toggle — slow followers (dev builds only; absent from shipped JS)
+    if (import.meta.env.DEV) {
+      const debugOn = !!window.__lrDebug?.slowFollowers;
+      const debugBg = this.add.rectangle(CANVAS_W / 2, CANVAS_H - 60, 220, 22, debugOn ? 0x1a2200 : 0x0e0e0e)
+        .setInteractive({ useHandCursor: true })
+        .setStrokeStyle(1, debugOn ? 0x446600 : 0x222222);
+      this._debugLabel = this.add.text(CANVAS_W / 2, CANVAS_H - 60,
+        `DEBUG: SLOW FOLLOWERS [${debugOn ? 'ON' : 'OFF'}]`, {
+          fontSize: '10px', fontFamily: 'monospace', color: debugOn ? '#88CC22' : '#333333'
+        }).setOrigin(0.5);
+      debugBg.on('pointerover', () => debugBg.setFillStyle(debugOn ? 0x253300 : 0x161616));
+      debugBg.on('pointerout',  () => debugBg.setFillStyle(debugOn ? 0x1a2200 : 0x0e0e0e));
+      debugBg.on('pointerdown', () => {
+        window.__lrDebug = window.__lrDebug || {};
+        window.__lrDebug.slowFollowers = !window.__lrDebug.slowFollowers;
+        this.scene.restart({ mode: this.mode });
+      });
+    }
 
     this.input.keyboard.on('keydown-ONE',   () => this._go(ALL_TRACKS[0]));
     this.input.keyboard.on('keydown-TWO',   () => this._go(ALL_TRACKS[1]));

@@ -79,8 +79,8 @@ export class RunScene extends Phaser.Scene {
 
     this._state = createInitialState(this._matchConfig, this.trackData);
 
-    // DEBUG: slow followers mode — set slots 1+ to 80% speed (never logged)
-    if (window.__lrDebug?.slowFollowers && numPlayers > 1) {
+    // DEBUG: slow followers mode — dev builds only (eliminated by tree-shaking in prod)
+    if (import.meta.env.DEV && window.__lrDebug?.slowFollowers && numPlayers > 1) {
       this._state.debugSlowSlots = this._state.players.slice(1).map(ps => ps.idx);
     }
 

@@ -12,6 +12,10 @@ import {
   PICKUP_TYPES
 } from './rules.js';
 
+// True in Vite dev builds; false in production (tree-shakes debug blocks) and Node.js tests.
+// import.meta.env is undefined in Node, so optional-chain to false safely.
+const _DEV = typeof import.meta.env !== 'undefined' && !!import.meta.env.DEV;
+
 // ─── Speed composition ────────────────────────────────────────────────────────
 // Exact order: debuff → sprint → draft. Each is Math.floor(speed * factor / 100).
 
@@ -49,6 +53,34 @@ function _computeSpeed(ps) {
   }
 
   return speed;
+}
+
+// DEV-only: log the per-player speed chain for the current tick.
+// Enable with: window.__lrDebug = { speedLog: true } in the browser console.
+function _logSpeedChain(ps, finalSpeed, tick) {
+  let debuffFactor = 100;
+  if (ps.debuffType === 'ice') {
+    const lv = ps.passives?.ice_grip ?? 0;
+    debuffFactor = lv >= 2 ? BOOST_CONFIG.passives.ice_grip.levels[1].factorPct
+                 : lv >= 1 ? BOOST_CONFIG.passives.ice_grip.levels[0].factorPct
+                 : BOOST_CONFIG.passives.ice_grip.baseFactorPct;
+  } else if (ps.debuffType === 'water') {
+    const lv = ps.passives?.water_shield ?? 0;
+    debuffFactor = lv >= 2 ? BOOST_CONFIG.passives.water_shield.levels[1].factorPct
+                 : lv >= 1 ? BOOST_CONFIG.passives.water_shield.levels[0].factorPct
+                 : BOOST_CONFIG.passives.water_shield.baseFactorPct;
+  } else if (ps.debuffType === 'snipe') {
+    debuffFactor = SNIPE_FACTOR;
+  }
+  const sprintFactor = ps.sprintTicksLeft > 0 ? 140 : 100;
+  const draftFactor  = ps.draftFactor ?? 100;
+  console.log(
+    `[speed t=${tick}] p${ps.idx}: base=${BASE_SPEED_CU}` +
+    ` debuff×${debuffFactor}%` +
+    ` sprint×${sprintFactor}%` +
+    ` draft×${draftFactor}%` +
+    ` → ${finalSpeed} cu/tick`
+  );
 }
 
 // Binary search insert into sorted obstacles array (ascending distanceScaled)
@@ -277,9 +309,13 @@ function _tickPlayer(s, ps) {
 
   if (ps.gs === 'RUNNING') {
     let speed = _computeSpeed(ps);
-    // DEBUG: slow follower mode (set via state.debugSlowSlots in RunScene — never logged)
-    if (s.debugSlowSlots && s.debugSlowSlots.includes(ps.idx)) {
+    // DEBUG: slow follower mode — dev builds only; absent from shipped JS via tree-shaking.
+    // ps.idx never appears in production speed calculations.
+    if (_DEV && s.debugSlowSlots?.includes(ps.idx)) {
       speed = Math.floor(speed * 80 / 100);
+    }
+    if (_DEV && typeof window !== 'undefined' && window.__lrDebug?.speedLog) {
+      _logSpeedChain(ps, speed, s.tick);
     }
     const prevPos = ps.trackPosition;
     ps.trackPosition += speed;
