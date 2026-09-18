@@ -1,3 +1,85 @@
+# Session 11 — Track Generator + Config Scene
+
+## Summary
+
+Procedural track generator (`sim/trackGen.js`), per-track recovery parameter, ConfigScene UI
+with live preview, stress test script, and MenuScene "GENERATED TRACK" option.
+
+## New files
+
+- `sim/trackGen.js` — pure function `generateTrack(params, seed)` + `PRESETS`
+- `src/ConfigScene.js` — configurator UI: preset buttons, seed reroll/input, advanced sliders, live map preview
+- `scripts/stressTestGen.js` — 200-run stress test across 5 param sets × 40 seeds
+
+## Changes
+
+### sim/trackGen.js — generator algorithm
+
+- Parameters: rhythm (0.6–2.0s), runLength (25–90s), pressure (40–100%), gates (0–50%),
+  laneBias (0–100), recovery (0.75–2.5s)
+- Validation: throws if `recovery*300*0.30 > rhythm*300` (slow player can't recover before next band)
+- Track length estimated from `300 * (1 - pressure/100 * (1 - 0.65))` avg speed model
+- Band positions scattered with mean spacing `rhythm*300`, min 240 units
+- Band kinds: relief forced at 1 per quarter; otherwise gate (gated by 800u constraint) or damage/relief
+- Post-pass ensures `floor(gateFrac * bandCount)` gates, converting damage bands as needed
+- Gate open lanes: sequential, each within ±1 of previous (Fisher-Yates shuffle for lane choice)
+- Lane bias: at 100, each lane has a fixed preferred hazard type; at 0, equal ice/water chance
+- Returns `debuffTicks: round(recovery * 60)` — overrides ICE_DEBUFF_TICKS/WATER_DEBUFF_TICKS in sim
+
+### Standard preset vs hand-authored Track 1 comparison
+
+| Metric              | Track 1 (hand) | Standard preset (seed 0) |
+|---------------------|----------------|--------------------------|
+| Length (units)      | 10 200         | ~9 945                   |
+| Gate fraction       | 25%            | ~30% target              |
+| Damage fraction     | 57%            | ~65–75% (pressure-driven)|
+| Relief fraction     | 17%            | ~15–20%                  |
+| Debuff ticks        | 75 (constant)  | 75 (recovery=1.25 → 1.25*60)|
+| Obstacle spacing    | ~285 units avg | ~285 units avg (rhythm=0.95) |
+
+Duration estimate on Standard preset: estimatedAvgSpeed=195u/s, target 45s → ~8775u track.
+Actual run time varies with passive loadout; headless test at 300u/s base would complete
+in ~33s; with debuffs closer to 45s as calibrated.
+
+### sim/state.js
+- Added `ICE_DEBUFF_TICKS` import
+- `createInitialState` stores `state.debuffTicks = trackData.debuffTicks ?? ICE_DEBUFF_TICKS`
+
+### sim/step.js
+- `_applyDebuff(ps, type, state)` now uses `state.debuffTicks` when present
+- Snipe debuff still uses `SNIPE_DEBUFF_TICKS` (unchanged)
+
+### src/RunScene.js
+- MatchConfig now includes `trackParams` and `trackSeed` (null for hand-authored tracks)
+- `appendLog` calls include `trackParams` / `trackSeed` for 1P and MP paths
+- `init()` accepts `trackParams`/`trackSeed` from data (passed by ConfigScene)
+
+### src/ConfigScene.js
+- Preset buttons: Standard, Calm, Frantic, Gauntlet
+- Seed display + reroll + numeric input field
+- Advanced toggle showing 6 parameter steppers (rhythm, runLength, pressure, gates, laneBias, recovery)
+- Live map preview: re-generates on every param change, renders same visual as PlanScene._drawMap
+- Recovery warning: shown when `recovery*300*0.30 > rhythm*300`
+- START PLANNING button routes to PlanScene (1p) or JoinScene (mp)
+
+### src/MenuScene.js
+- Added [4] GENERATED TRACK button routing to ConfigScene
+- Track buttons shifted up slightly to accommodate 4th option
+
+### src/main.js
+- ConfigScene added to scene list (between PlanScene and RunScene)
+
+## Design notes
+
+- Recovery as a per-track param allows the generator to tune debuff harshness independently of
+  the global constant. Hand-authored tracks still use ICE_DEBUFF_TICKS=75 (trackData.debuffTicks absent).
+- The SLOW_FACTOR=0.30 validation uses the worst-case speed (water, no shield) — this is conservative;
+  most players will recover faster. It prevents degenerate param combos where debuffs are permanent.
+- The post-pass gate count enforcement converts damage bands (not relief) to maintain pressure feel.
+- Pickup placement avoids the single clear lane of two-hazard bands to prevent "forced pickup risk".
+
+---
+
 # Session 10 — Track Content Rebuild + Debuff Rebalance
 
 ## Summary

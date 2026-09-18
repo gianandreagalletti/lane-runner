@@ -31,6 +31,9 @@ export class RunScene extends Phaser.Scene {
     this._replayIntents = data.replayIntents || [];
     this._replayOriginalOutcome = data.originalOutcome || null;
     this._claims        = data.claims || null;
+    // Track generator params (from ConfigScene)
+    this._trackParams   = data.trackParams || null;
+    this._trackSeed     = data.trackSeed   != null ? data.trackSeed : null;
 
     // Generalize loadouts
     if (this.mode === '1p') {
@@ -64,7 +67,9 @@ export class RunScene extends Phaser.Scene {
           profileId: profileIds[i],
           inputSource: this._claims ? this._claims[i].inputSource : (i === 0 ? 'local_keyboard' : 'pad'),
           loadout: JSON.parse(JSON.stringify(this._loadouts[i]))
-        }))
+        })),
+        trackParams: this.trackData.params  || this._trackParams || null,
+        trackSeed:   this.trackData.seed    != null ? this.trackData.seed : (this._trackSeed != null ? this._trackSeed : null)
       };
       const rt = JSON.parse(JSON.stringify(this._matchConfig));
       if (JSON.stringify(rt) !== JSON.stringify(this._matchConfig)) console.error('MatchConfig round-trip FAILED');
@@ -306,7 +311,9 @@ export class RunScene extends Phaser.Scene {
                      sprint: ps.boostUseCount.sprint ?? 0,
                      caltrop: ps.boostUseCount.caltrop ?? 0,
                      snipe_shot: ps.boostUseCount.snipe_shot ?? 0 },
-        laneTimeTicks: [...ps.laneTimeTicks], planningTimeMs: this.planningTimeMs });
+        laneTimeTicks: [...ps.laneTimeTicks], planningTimeMs: this.planningTimeMs,
+        trackParams: this._matchConfig.trackParams || null,
+        trackSeed:   this._matchConfig.trackSeed   != null ? this._matchConfig.trackSeed : null });
       const replayData = this._isReplay
         ? { replayOutcome: ps.gs, replayMatched: ps.gs === this._replayOriginalOutcome }
         : {};
@@ -353,7 +360,9 @@ export class RunScene extends Phaser.Scene {
           inputSource: d.inputSource
         })),
         placements: placements.map((p, i) => ({ slot: `p${i+1}`, place: p })),
-        planningTimeMs: this.planningTimeMs
+        planningTimeMs: this.planningTimeMs,
+        trackParams: this._matchConfig.trackParams || null,
+        trackSeed:   this._matchConfig.trackSeed   != null ? this._matchConfig.trackSeed : null
       });
 
       this.time.delayedCall(1500, () => {

@@ -44,8 +44,11 @@ export class MenuScene extends Phaser.Scene {
       '5 500 units · 15 bands · no single lane survives'
     ];
     ALL_TRACKS.forEach((track, i) => {
-      this._trackBtn(CANVAS_W / 2, 338 + i * 90, track, trackDescs[i], i + 1);
+      this._trackBtn(CANVAS_W / 2, 318 + i * 78, track, trackDescs[i], i + 1);
     });
+
+    // Generated track button
+    this._genTrackBtn(CANVAS_W / 2, 318 + ALL_TRACKS.length * 78);
 
     // Bottom bar: Reset P1 | Reset P2 | Reset P3 | Controls | Export
     const resetP1Bg = this.add.rectangle(60, CANVAS_H - 34, 100, 30, 0x160808)
@@ -163,6 +166,7 @@ export class MenuScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-TWO',   () => this._go(ALL_TRACKS[1]));
     this.input.keyboard.on('keydown-THREE', () => this._go(ALL_TRACKS[2]));
     this.input.keyboard.on('keydown-ENTER', () => this._go(ALL_TRACKS[0]));
+    this.input.keyboard.on('keydown-FOUR',  () => this._goGenerated());
   }
 
   _drawProgressBadge() {
@@ -232,5 +236,26 @@ export class MenuScene extends Phaser.Scene {
     } else {
       this.scene.start('JoinScene', { trackData: track, mode: this.mode });
     }
+  }
+
+  _genTrackBtn(x, y) {
+    const bg = this.add.rectangle(x, y, 460, 66, 0x0e1a20)
+      .setInteractive({ useHandCursor: true })
+      .setStrokeStyle(2, 0x1c3a2a);
+
+    this.add.text(x, y - 10, '[4]  GENERATED TRACK', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#66DDAA'
+    }).setOrigin(0.5);
+    this.add.text(x, y + 14, 'configure seed · presets · parameters', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#2e5a42'
+    }).setOrigin(0.5);
+
+    bg.on('pointerover', () => bg.setFillStyle(0x14221a));
+    bg.on('pointerout',  () => bg.setFillStyle(0x0e1a20));
+    bg.on('pointerdown', () => this._goGenerated());
+  }
+
+  _goGenerated() {
+    this.scene.start('ConfigScene', { mode: this.mode, claims: this._claims || null });
   }
 }

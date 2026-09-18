@@ -349,16 +349,18 @@ function _handleCollision(s, ps, obsIdx) {
   // Normal ice/water hit: apply debuff based on passive level
   obs.hitByPlayer[ps.idx] = true;
   if (obs.type === 'ice') {
-    _applyDebuff(ps, 'ice');
+    _applyDebuff(ps, 'ice', s);
   }
   if (obs.type === 'water') {
-    _applyDebuff(ps, 'water');
+    _applyDebuff(ps, 'water', s);
   }
 }
 
-function _applyDebuff(ps, type) {
+function _applyDebuff(ps, type, state) {
   ps.debuffType      = type;
-  ps.debuffTicksLeft = type === 'ice' ? ICE_DEBUFF_TICKS : WATER_DEBUFF_TICKS;
+  // Use per-track debuffTicks if available, else fall back to rule constants
+  ps.debuffTicksLeft = (state?.debuffTicks != null) ? state.debuffTicks
+    : (type === 'ice' ? ICE_DEBUFF_TICKS : WATER_DEBUFF_TICKS);
   ps.flashTicksLeft  = FLASH_TICKS;
 }
 

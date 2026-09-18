@@ -1,5 +1,5 @@
 import { BOOSTS, BOOST_CONFIG } from '../src/boosts.js';
-import { CENTI_SCALE, LANE_SWITCH_TICKS, PICKUP_TYPES } from './rules.js';
+import { CENTI_SCALE, LANE_SWITCH_TICKS, PICKUP_TYPES, ICE_DEBUFF_TICKS } from './rules.js';
 
 // Fixed canonical slot mapping (always in this order regardless of charges bought)
 // Slot 0: rock_break, Slot 1: sprint, Slot 2: caltrop, Slot 3: snipe_shot
@@ -183,6 +183,7 @@ export function createInitialState(matchConfig, trackData) {
     ended:             false,
     events:            [],
     rngSeed:           matchConfig.seed,
-    debugSlowSlots:    []
+    debugSlowSlots:    [],
+    debuffTicks:       trackData.debuffTicks ?? ICE_DEBUFF_TICKS
   };
 }
