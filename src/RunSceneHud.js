@@ -89,7 +89,10 @@ export function buildHudMP(scene, allSlots) {
     const sprintT = scene.add.text(isRight ? CANVAS_W - 165 : 165, yBase + 42, '', {
       fontSize: '11px', fontFamily: 'monospace', color: '#FFEE55', stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5, 0);
-    huds.push({ chipRefs, distT, debuffT, sprintT });
+    const draftT = scene.add.text(isRight ? CANVAS_W - 275 : 275, yBase + 42, '', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#AAEEFF', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5, 0);
+    huds.push({ chipRefs, distT, debuffT, sprintT, draftT });
   });
 
   const gapText = scene.add.text(CANVAS_W / 2, 14, '', {
@@ -104,7 +107,13 @@ export function updateHud1P(refs, state) {
   const debuff = ps.debuffType ? `SLOWED ${_speedPct(ps)}%` : '';
   refs.speedText.setText(debuff);
   refs.sprintText.setText(ps.sprintTicksLeft > 0 ? `SPRINT ${(ps.sprintTicksLeft / 60).toFixed(1)}s` : '');
-  if (refs.draftText) refs.draftText.setText(ps.isDrafting ? '» DRAFT »' : '');
+  if (refs.draftText) {
+    if (ps.isDrafting && ps.draftFactor > 100) {
+      refs.draftText.setText(`\u2248 DRAFT +${ps.draftFactor - 100}%`);
+    } else {
+      refs.draftText.setText('');
+    }
+  }
   ps.slots.forEach((slot, i) => {
     const ref = refs.chipRefs[i];
     if (!ref) return;
@@ -126,6 +135,13 @@ export function updateHudMP(refs, state) {
     hud.distT.setText(`${Math.floor(ps.trackPosition / CENTI_SCALE)} / ${Math.floor(state.trackLength / CENTI_SCALE)}`);
     hud.debuffT.setText(ps.debuffType ? `SLOWED ${_speedPct(ps)}%` : '');
     hud.sprintT.setText(ps.sprintTicksLeft > 0 ? `SPRINT ${(ps.sprintTicksLeft / 60).toFixed(1)}s` : '');
+    if (hud.draftT) {
+      if (ps.isDrafting && ps.draftFactor > 100) {
+        hud.draftT.setText(`\u2248 +${ps.draftFactor - 100}%`);
+      } else {
+        hud.draftT.setText('');
+      }
+    }
     ps.slots.forEach((slot, i) => {
       const ref = hud.chipRefs[i];
       if (!ref) return;

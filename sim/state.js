@@ -115,6 +115,7 @@ export function createInitialState(matchConfig, trackData) {
       drawAlpha:          1.0,
       drawAlphaTicksLeft: 0,
       isDrafting:         false,
+      draftFactor:        100,
       // BENCHED: phase activation state — kept commented for reference
       // phaseActive:     false,
       // phasePendingObsIdx: -1
@@ -133,6 +134,7 @@ export function createInitialState(matchConfig, trackData) {
     camPositionScaled: 0,
     ended:             false,
     events:            [],
-    rngSeed:           matchConfig.seed
+    rngSeed:           matchConfig.seed,
+    debugSlowSlots:    []
   };
 }

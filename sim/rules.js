@@ -36,8 +36,8 @@ export const COL_HALF_Y_SCALED      = 1500; // (OBS_H/2+20)×CENTI_SCALE = 15×1
 export const COL_HALF_X             =  100; // OBS_W/2+20 = 100px
 
 // Draft slipstream (centi-units)
-export const DRAFT_RANGE_CU     = 150 * CENTI_SCALE;  // 15000 cu
-export const DRAFT_FACTOR       = 108;                 // integer percent
+export const DRAFT_RANGE_CU     = 26000;   // 260 track units
+export const DRAFT_MAX_BONUS    = 12;      // integer percent at gap=0
 
 // Snipe shot projectile
 export const SNIPE_SPEED_CU     = 900;   // cu/tick

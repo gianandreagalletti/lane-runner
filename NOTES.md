@@ -1,3 +1,50 @@
+# Session 9 — Graded Draft + Wake Visual + Debug Mode
+
+## Summary
+
+Graded draft ramp, visible wake behind every vehicle, draft HUD indicator, debug slow-follower mode.
+
+## Changes
+
+### Part 1: Graded draft (sim/rules.js, sim/step.js, sim/state.js)
+- `DRAFT_RANGE_CU` changed 15000 → 26000 (260 track units), `DRAFT_FACTOR` removed.
+- New constant `DRAFT_MAX_BONUS = 12` (integer percent at gap=0).
+- Draft is now a linear ramp: `draftFactor = 100 + floor(DRAFT_MAX_BONUS * (DRAFT_RANGE_CU - gap) / DRAFT_RANGE_CU)`
+  - gap=100 → draftFactor=111, gap=13000 → 106, gap=25900 → 100 (verified by hand).
+- `ps.draftFactor` and `ps.isDrafting` stored in player state each tick.
+- Speed chain unchanged in order: debuff → sprint → draft (draft applied last).
+- `state.debugSlowSlots = []` added to initial state (default empty, no effect on normal play).
+
+### Part 2: Wake visual (src/player.js)
+- Wake drawn FIRST (before vehicle billboard) so it appears behind it.
+- 5 strips from `zRel+1` to `zRel+1+DRAFT_RANGE_TU` (260 tu), tapering from 0.6×BILL_W to 0.15×BILL_W.
+- Peak alpha = `(DRAFT_MAX_BONUS / 12) * 0.18` — tied to same constant as draft formula.
+- Each strip fades linearly; faint edge lines for "air disturbance" look.
+- Uses vehicle's own body colour per vehicle index.
+
+### Part 3: Draft streaks + HUD (src/player.js, src/RunSceneHud.js)
+- Draft streaks: 2 short lines (vs sprint's 3), intensity proportional to `(draftFactor-100) / DRAFT_MAX_BONUS`.
+- 1P HUD: `» DRAFT »` text replaced with `≈ DRAFT +N%` showing live bonus percent.
+- MP HUD: small `≈ +N%` tag added next to sprint text for each player.
+
+### Part 4: Debug slow-follower mode (src/MenuScene.js, src/RunScene.js, sim/step.js)
+- Toggle button in MenuScene: "DEBUG: SLOW FOLLOWERS [ON/OFF]", sets `window.__lrDebug.slowFollowers`.
+- When active, RunScene sets `state.debugSlowSlots = [1, 2, ...]` (all slots except 0) after state creation.
+- sim/step.js: if `state.debugSlowSlots.includes(ps.idx)`, final speed multiplied by 80/100.
+- `debugSlowSlots` is never written to MatchConfig, never appears in session log.
+
+## Colour/constant reference (Session 9)
+
+| Constant          | Value | Meaning                           |
+|-------------------|-------|-----------------------------------|
+| DRAFT_RANGE_CU    | 26000 | 260 track units                   |
+| DRAFT_MAX_BONUS   | 12    | integer percent bonus at gap=0    |
+| DRAFT_RANGE_TU    | 260   | (DRAFT_RANGE_CU / CENTI_SCALE)    |
+| Wake peak alpha   | 0.18  | at DRAFT_MAX_BONUS=12             |
+| Debug slow factor | 80%   | of computed speed for slow slots  |
+
+---
+
 # Session 8 — Art/Presentation Pass
 
 ## Summary

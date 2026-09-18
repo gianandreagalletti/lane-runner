@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
-import { LANE_SWITCH_TICKS, FLASH_TICKS } from '../sim/rules.js';
+import { LANE_SWITCH_TICKS, FLASH_TICKS, DRAFT_RANGE_CU, DRAFT_MAX_BONUS } from '../sim/rules.js';
 import { PROJ, LANE_TU, project } from './render/projection.js';
+
+// Wake geometry constants (derived from draft constants — single source of truth)
+const DRAFT_RANGE_TU = DRAFT_RANGE_CU / 100;  // 260 track units (CENTI_SCALE=100)
 
 // Billboard width in track units (same for all vehicles)
 const BILL_W_TU = 44;
@@ -96,6 +99,46 @@ export class Player {
       ? Math.min(Math.pow(zRel / PROJ.DRAW_DISTANCE, 2), 0.82) * PROJ.PERSPECTIVE_BLEND
       : 0;
 
+    // --- Wake (drawn FIRST so it appears behind the vehicle) ---
+    // Peak alpha: proportional to DRAFT_MAX_BONUS/12 — changing the bonus changes wake intensity
+    const peakAlpha = (DRAFT_MAX_BONUS / 12) * 0.18;
+    const wakeW_near = BILL_W_TU * 0.6;   // near end (just behind vehicle) wider
+    const wakeW_far  = BILL_W_TU * 0.15;  // far end (260 units behind) narrower
+    const vehicleColour = VEHICLE_BODIES[vIdx];
+    const NUM_STRIPS = 5;
+    for (let s = 0; s < NUM_STRIPS; s++) {
+      const t0 = s / NUM_STRIPS;
+      const t1 = (s + 1) / NUM_STRIPS;
+      const alpha = peakAlpha * (1 - t0);  // fades toward far end
+
+      const z0 = zRel + 1 + t0 * DRAFT_RANGE_TU;
+      const z1 = zRel + 1 + t1 * DRAFT_RANGE_TU;
+      const w0 = wakeW_near + (wakeW_far - wakeW_near) * t0;
+      const w1 = wakeW_near + (wakeW_far - wakeW_near) * t1;
+
+      // Skip if behind near plane or beyond draw distance
+      if (z1 < PROJ.NEAR_CLAMP || z0 > PROJ.DRAW_DISTANCE) continue;
+
+      const sL = project(worldX - w0 / 2, z0);
+      const sR = project(worldX + w0 / 2, z0);
+      const eL = project(worldX - w1 / 2, z1);
+      const eR = project(worldX + w1 / 2, z1);
+
+      g.fillStyle(vehicleColour, alpha);
+      g.fillPoints([sL, sR, eR, eL], true);
+    }
+    // Faint edge lines for "air disturbance" look
+    const nearL = project(worldX - wakeW_near / 2, zRel + 1);
+    const nearR = project(worldX + wakeW_near / 2, zRel + 1);
+    const farL  = project(worldX - wakeW_far  / 2, zRel + 1 + DRAFT_RANGE_TU);
+    const farR  = project(worldX + wakeW_far  / 2, zRel + 1 + DRAFT_RANGE_TU);
+    const farMid = project(worldX, zRel + 1 + DRAFT_RANGE_TU);
+    const nearMid = project(worldX, zRel + 1);
+    g.lineStyle(1, vehicleColour, peakAlpha * 0.4);
+    g.beginPath(); g.moveTo(nearL.x, nearL.y); g.lineTo(farL.x, farL.y); g.strokePath();
+    g.beginPath(); g.moveTo(nearR.x, nearR.y); g.lineTo(farR.x, farR.y); g.strokePath();
+    g.beginPath(); g.moveTo(nearMid.x, nearMid.y); g.lineTo(farMid.x, farMid.y); g.strokePath();
+
     // --- Soft elliptical shadow ---
     const shadowW = bw * 1.1;
     const shadowH = bh * 0.12;
@@ -155,6 +198,18 @@ export class Player {
         const sy = by + bh * 0.2;
         const len = bh * (0.25 + i * 0.08);
         g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx - bw * 0.05, sy + len); g.strokePath();
+      }
+    }
+
+    // --- Draft streaks (lower intensity than sprint — 2 streaks vs 3) ---
+    if (ps.isDrafting && ps.draftFactor > 100) {
+      const intensity = (ps.draftFactor - 100) / DRAFT_MAX_BONUS;
+      g.lineStyle(1, vehicleColour, 0.25 * intensity);
+      for (let i = 0; i < 2; i++) {
+        const sx = bx + bw * (0.25 + i * 0.5);
+        const sy = by + bh * 0.3;
+        const len = bh * (0.15 + intensity * 0.1);
+        g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx - bw * 0.04, sy + len); g.strokePath();
       }
     }
   }

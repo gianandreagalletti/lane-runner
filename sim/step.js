@@ -7,7 +7,7 @@ import {
   PHASE_ALPHA_TICKS,
   BASE_SPEED_CU,
   GAP_ELIMINATION_CU, COL_HALF_Y_SCALED,
-  DRAFT_RANGE_CU, DRAFT_FACTOR,
+  DRAFT_RANGE_CU, DRAFT_MAX_BONUS,
   SNIPE_SPEED_CU, SNIPE_LIFETIME, SNIPE_FACTOR, SNIPE_DEBUFF_TICKS,
   PICKUP_TYPES
 } from './rules.js';
@@ -43,9 +43,9 @@ function _computeSpeed(ps) {
     speed = Math.floor(speed * 140 / 100);
   }
 
-  // 3. Draft
-  if (ps.isDrafting) {
-    speed = Math.floor(speed * DRAFT_FACTOR / 100);
+  // 3. Draft (graded linear ramp — draftFactor computed per-tick before _tickPlayer)
+  if (ps.draftFactor > 100) {
+    speed = Math.floor(speed * ps.draftFactor / 100);
   }
 
   return speed;
@@ -98,17 +98,24 @@ export function step(state, intents) {
     if (ps) _processIntent(s, ps, intent);
   }
 
-  // Compute draft for each player BEFORE moving (uses previous positions)
+  // Compute graded draft for each player BEFORE moving (uses previous positions)
+  // Verify: gap=100 → draftFactor=111, gap=13000 → 106, gap=25900 → 100
   for (const ps of s.players) {
-    if (!_isActive(ps)) { ps.isDrafting = false; continue; }
-    ps.isDrafting = false;
+    if (!_isActive(ps)) { ps.isDrafting = false; ps.draftFactor = 100; continue; }
+    let draftFactor = 100;
+    let minGap = Infinity;
     for (const other of s.players) {
       if (other.idx === ps.idx) continue;
       if (other.gs !== 'RUNNING' && other.gs !== 'REACTIVE') continue;
       if (other.lane !== ps.lane) continue;
       const gap = other.trackPosition - ps.trackPosition;
-      if (gap > 0 && gap <= DRAFT_RANGE_CU) { ps.isDrafting = true; break; }
+      if (gap > 0 && gap < minGap) minGap = gap;
     }
+    if (minGap < DRAFT_RANGE_CU) {
+      draftFactor = 100 + Math.floor(DRAFT_MAX_BONUS * (DRAFT_RANGE_CU - minGap) / DRAFT_RANGE_CU);
+    }
+    ps.draftFactor = draftFactor;
+    ps.isDrafting  = draftFactor > 100;
   }
 
   // Advance projectiles
@@ -267,7 +274,11 @@ function _tickPlayer(s, ps) {
   ps.laneTimeTicks[ps.lane]++;
 
   if (ps.gs === 'RUNNING') {
-    const speed = _computeSpeed(ps);
+    let speed = _computeSpeed(ps);
+    // DEBUG: slow follower mode (set via state.debugSlowSlots in RunScene — never logged)
+    if (s.debugSlowSlots && s.debugSlowSlots.includes(ps.idx)) {
+      speed = Math.floor(speed * 80 / 100);
+    }
     const prevPos = ps.trackPosition;
     ps.trackPosition += speed;
 
