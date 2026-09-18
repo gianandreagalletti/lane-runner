@@ -115,13 +115,20 @@ export class PlanScene extends Phaser.Scene {
     }
 
     const BW = COL_W - 16, BH = 12;
-    const TYPE_LABEL = { rock: 'R ✕', ice: 'I +', water: 'W ~' };
-    const LABEL_COL  = { rock: '#FFB8B0', ice: '#C8F0FF', water: '#C8FFFF' };
+    // Updated colours: rock=guard rail (dark with yellow stripe indicator), ice=pale blue, water=teal
+    const MAP_COLORS = { rock: 0x2A2E34, ice: 0xB8D8E8, water: 0x3AA8C4 };
+    const TYPE_LABEL = { rock: '▓ RAIL', ice: '~ ICE', water: '≈ WTR' };
+    const LABEL_COL  = { rock: '#F2C230', ice: '#C8F0FF', water: '#AAEEFF' };
     for (const obs of this.trackData.obstacles) {
       const ty  = mapTop + obs.distance * sc;
       const lx  = colLeft(obs.lane) + 8;
-      g.fillStyle(OBS_COLORS[obs.type]);
+      g.fillStyle(MAP_COLORS[obs.type] ?? OBS_COLORS[obs.type]);
       g.fillRect(lx, ty - BH / 2, BW, BH);
+      // Guard rail: add yellow chevron stripe
+      if (obs.type === 'rock') {
+        g.fillStyle(0xF2C230, 0.7);
+        g.fillRect(lx, ty - 1, BW, 2);
+      }
       this.add.text(lx + BW / 2, ty, TYPE_LABEL[obs.type], {
         fontSize: '8px', fontFamily: 'monospace', color: LABEL_COL[obs.type]
       }).setOrigin(0.5, 0.5);
@@ -132,7 +139,7 @@ export class PlanScene extends Phaser.Scene {
     for (let i = 0; i < 3; i++) {
       const c = counts[i];
       const parts = [];
-      if (c.rock  > 0) parts.push(`${c.rock} rock`);
+      if (c.rock  > 0) parts.push(`${c.rock} rail`);
       if (c.ice   > 0) parts.push(`${c.ice} ice`);
       if (c.water > 0) parts.push(`${c.water} water`);
       this.add.text(colCenter(i), SY, parts.join('  ') || 'clear', {

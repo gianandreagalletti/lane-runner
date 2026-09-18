@@ -174,8 +174,11 @@ export class ResultScene extends Phaser.Scene {
 
   _drawPlayerPanelMP(cx, p, idx, isWinner, place) {
     const placeLabels = ['1st', '2nd', '3rd'];
+    // Vehicle colours and names per slot
+    const vehicleColors = ['#F0F0F0', '#C4463A', '#3A5ACD'];
+    const vehicleNames  = ['AMBULANCE', 'FIRE TRUCK', 'POLICE'];
     let y = 130;
-    const col = PLAYER_COLOR_HEX[idx] || '#AADDFF';
+    const col = vehicleColors[idx] || '#AADDFF';
 
     if (isWinner) {
       this.add.text(cx, y - 20, '★ 1st PLACE', { fontSize: '13px', fontFamily: 'monospace', color: '#FFD700' }).setOrigin(0.5);
@@ -183,7 +186,8 @@ export class ResultScene extends Phaser.Scene {
       this.add.text(cx, y - 20, placeLabels[place - 1] || `${place}th`, { fontSize: '13px', fontFamily: 'monospace', color: '#667788' }).setOrigin(0.5);
     }
 
-    this.add.text(cx, y, `P${idx + 1}`, { fontSize: '26px', fontFamily: 'monospace', color: col }).setOrigin(0.5); y += 38;
+    this.add.text(cx, y, `P${idx + 1}`, { fontSize: '26px', fontFamily: 'monospace', color: col }).setOrigin(0.5); y += 28;
+    this.add.text(cx, y, vehicleNames[idx] || '', { fontSize: '12px', fontFamily: 'monospace', color: col }).setOrigin(0.5); y += 20;
 
     const resColor = p.result === 'COMPLETE' ? '#66EE88' : '#EE5544';
     const resText  = p.result === 'COMPLETE' ? 'COMPLETE'

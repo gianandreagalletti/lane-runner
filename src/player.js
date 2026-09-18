@@ -2,15 +2,40 @@ import Phaser from 'phaser';
 import { LANE_SWITCH_TICKS, FLASH_TICKS } from '../sim/rules.js';
 import { PROJ, LANE_TU, project } from './render/projection.js';
 
-// Billboard size in track units
+// Billboard width in track units (same for all vehicles)
 const BILL_W_TU = 44;
-const BILL_H_TU = 58;
+// Heights per vehicle slot: ambulance, fire truck, police
+const BILL_HEIGHTS = [66, 62, 54];
+
+// Vehicle body colours
+const VEHICLE_BODIES  = [0xF0F0F0, 0xC4463A, 0x1A2A6C];
+const VEHICLE_STRIPES = [0xE03030, 0xFFFFFF, 0xFFFFFF];
+
+// Light bar colours per vehicle: [even-tick colour, odd-tick colour]
+const LIGHT_BAR_COLORS = [
+  [0xFF2020, 0xFFFFFF],  // ambulance: red / white
+  [0xFF2020, 0xFFD700],  // fire truck: red / yellow
+  [0xFF3030, 0x3030FF],  // police: red / blue
+];
+
+// Fog blend helper
+function fogApply(hex, fogT) {
+  const r = (hex >> 16) & 0xFF;
+  const g = (hex >>  8) & 0xFF;
+  const b =  hex        & 0xFF;
+  const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+  return (clamp(r + (0x3C - r) * fogT) << 16) |
+         (clamp(g + (0x5A - g) * fogT) <<  8) |
+          clamp(b + (0x6B - b) * fogT);
+}
 
 export class Player {
   constructor(scene, opts = {}) {
     this.scene            = scene;
     this.visualOffsetX_TU = opts.visualOffsetX || 0;  // track units (±45 or 0)
     this.baseBodyColor    = opts.bodyColor || 0xFFFFFF;
+    // Vehicle slot index (0=ambulance, 1=fire truck, 2=police)
+    this.vehicleIdx       = opts.vehicleIdx ?? 0;
 
     // Expose x/y in screen pixels for HUD/label positioning
     this.x  = 640;
@@ -28,9 +53,10 @@ export class Player {
   /**
    * @param {object} ps        - player state from sim
    * @param {number} cameraZ   - camera position in track units
-   * @param {number} playerIdx - 0-based index (unused currently, for future use)
+   * @param {number} playerIdx - 0-based index
+   * @param {number} simTick   - current simulation tick for light bar flash
    */
-  render(ps, cameraZ, playerIdx) {
+  render(ps, cameraZ, playerIdx, simTick) {
     const g = this.graphics;
     g.clear();
     g.setAlpha(ps.drawAlpha);
@@ -59,11 +85,11 @@ export class Player {
     this.y = y;
     this.screenScale = scale;
 
+    const vIdx = this.vehicleIdx;
     const bw = BILL_W_TU * scale;
-    const bh = BILL_H_TU * scale;
+    const bh = BILL_HEIGHTS[vIdx] * scale;
     const bx = x - bw / 2;
     const by = y - bh;       // bottom of billboard at projected ground point
-    const cornerR = Math.max(2, bw * 0.12);
 
     // Fog factor
     const fogT = PROJ.FOG_ENABLED
@@ -79,7 +105,6 @@ export class Player {
     // --- Draft slipstream indicator ---
     if (ps.isDrafting) {
       g.lineStyle(2, 0xAAEEFF, 0.55);
-      // Two small chevrons above the billboard
       const chevW = bw * 0.35;
       const chevH = bh * 0.1;
       for (let ci = 0; ci < 2; ci++) {
@@ -93,6 +118,7 @@ export class Player {
     }
 
     // --- Debuff glow ---
+    const cornerR = Math.max(2, bw * 0.08);
     if (ps.debuffType === 'ice') {
       g.fillStyle(0xB8D8E8, 0.35);
       g.fillRoundedRect(bx - 4, by - 4, bw + 8, bh + 8, cornerR + 2);
@@ -104,52 +130,107 @@ export class Player {
       g.fillRoundedRect(bx - 4, by - 4, bw + 8, bh + 8, cornerR + 2);
     }
 
-    // --- Body colour with flash ---
-    let bodyColor = this.baseBodyColor;
+    // --- Determine body colour (with flash effect) ---
+    let bodyColorBase = VEHICLE_BODIES[vIdx];
     if (ps.flashTicksLeft > 0 && ps.debuffType) {
       const t = ps.flashTicksLeft / FLASH_TICKS;
       const flashCol = ps.debuffType === 'ice' ? 0x88CCFF :
                        ps.debuffType === 'snipe' ? 0xFF6644 : 0x44CCEE;
       const c = Phaser.Display.Color.Interpolate.ColorWithColor(
         Phaser.Display.Color.ValueToColor(flashCol),
-        Phaser.Display.Color.ValueToColor(this.baseBodyColor),
+        Phaser.Display.Color.ValueToColor(bodyColorBase),
         100, Math.round((1 - t) * 100)
       );
-      bodyColor = Phaser.Display.Color.GetColor(c.r, c.g, c.b);
+      bodyColorBase = Phaser.Display.Color.GetColor(c.r, c.g, c.b);
     }
 
-    // Apply fog to body colour
-    if (fogT > 0) {
-      const fc = {
-        r: (bodyColor >> 16) & 0xFF,
-        g: (bodyColor >>  8) & 0xFF,
-        b:  bodyColor        & 0xFF,
-      };
-      const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
-      bodyColor = (clamp(fc.r + (0x3C - fc.r) * fogT) << 16) |
-                  (clamp(fc.g + (0x5A - fc.g) * fogT) <<  8) |
-                   clamp(fc.b + (0x6B - fc.b) * fogT);
-    }
-
-    g.fillStyle(bodyColor);
-    g.fillRoundedRect(bx, by, bw, bh, cornerR);
-
-    // --- Darker band across lower third for volume ---
-    const bandY = by + bh * 0.65;
-    const bandH = bh * 0.28;
-    g.fillStyle(0x000000, 0.22);
-    g.fillRoundedRect(bx, bandY, bw, bandH, { bl: cornerR, br: cornerR, tl: 0, tr: 0 });
+    // Draw vehicle
+    this._drawVehicle(g, x, y, scale, vIdx, simTick ?? 0, ps.sprintTicksLeft > 0, fogT, bodyColorBase, ps);
 
     // --- Sprint streaks ---
     if (ps.sprintTicksLeft > 0) {
       g.lineStyle(1, 0xFFFF88, 0.5);
-      const streakCount = 3;
-      for (let i = 0; i < streakCount; i++) {
+      for (let i = 0; i < 3; i++) {
         const sx = bx + bw * (0.2 + i * 0.3);
         const sy = by + bh * 0.2;
         const len = bh * (0.25 + i * 0.08);
         g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx - bw * 0.05, sy + len); g.strokePath();
       }
+    }
+  }
+
+  _drawVehicle(g, x, y, scale, vIdx, simTick, sprintActive, fogT, bodyColorBase, ps) {
+    const bw = BILL_W_TU * scale;
+    const bh = BILL_HEIGHTS[vIdx] * scale;
+    const bx = x - bw / 2;
+    const by = y - bh;
+
+    const bodyColor   = fogApply(bodyColorBase, fogT);
+    const stripeColor = fogApply(VEHICLE_STRIPES[vIdx], fogT);
+
+    // 1. Main body rectangle
+    g.fillStyle(bodyColor, 1);
+    g.fillRect(bx, by, bw, bh);
+
+    // 2. Cabin windows (top ~28% of body, dark)
+    g.fillStyle(fogApply(0x1A1A2A, fogT), 0.88);
+    g.fillRect(bx + bw * 0.1, by, bw * 0.8, bh * 0.28);
+
+    // 3. Livery stripe (horizontal ~68% down from top)
+    g.fillStyle(stripeColor, 0.9);
+    g.fillRect(bx, by + bh * 0.68, bw, bh * 0.08);
+
+    // 4. Wheels (4 dark blocks at corners)
+    const ww = bw * 0.2, wh = bh * 0.12;
+    g.fillStyle(fogApply(0x111111, fogT), 1);
+    g.fillRect(bx,           y - wh,          ww, wh);  // front-left
+    g.fillRect(bx + bw - ww, y - wh,          ww, wh);  // front-right
+    g.fillRect(bx,           by + bh * 0.75,  ww, wh);  // rear-left
+    g.fillRect(bx + bw - ww, by + bh * 0.75,  ww, wh);  // rear-right
+
+    // 5. Rear lights (red)
+    g.fillStyle(fogApply(0xFF2020, fogT), 0.9);
+    g.fillRect(bx,             y - bh * 0.15, bw * 0.1, bh * 0.08);
+    g.fillRect(bx + bw * 0.9,  y - bh * 0.15, bw * 0.1, bh * 0.08);
+
+    // 6. Light bar flash (top of vehicle)
+    const flashPeriod = sprintActive ? 10 : 30;
+    const flashState  = Math.floor(simTick / flashPeriod) % 2;
+    const barColors   = LIGHT_BAR_COLORS[vIdx];
+    const barColor    = fogApply(barColors[flashState], fogT);
+    g.fillStyle(barColor, 0.95);
+    g.fillRect(bx + bw * 0.2, by - bh * 0.06, bw * 0.6, bh * 0.06);
+
+    // 7. Vehicle-specific feature
+    if (vIdx === 0) {
+      // Ambulance: red cross on side body
+      const cxBox = bx + bw * 0.38;
+      const cyBox = by + bh * 0.35;
+      const cW = bw * 0.24, cH = bh * 0.18;
+      const vW = bw * 0.08, vH = bh * 0.30;
+      g.fillStyle(fogApply(0xE03030, fogT), 1);
+      g.fillRect(cxBox, cyBox + cH * 0.1, cW, cH * 0.8);     // horizontal bar
+      g.fillRect(cxBox + cW * 0.33, cyBox, cW * 0.33, cH);   // vertical bar
+      // White cross on top
+      g.fillStyle(0xFFFFFF, 0.9);
+      g.fillRect(cxBox + cW * 0.15, cyBox + cH * 0.35, cW * 0.7, cH * 0.3);
+      g.fillRect(cxBox + cW * 0.38, cyBox + cH * 0.1,  cW * 0.24, cH * 0.8);
+    } else if (vIdx === 1) {
+      // Fire truck: ladder lines on roof area
+      g.lineStyle(1, fogApply(0xCCCCCC, fogT), 0.7);
+      for (let i = 0; i < 4; i++) {
+        const lx = bx + bw * (0.15 + i * 0.19);
+        g.beginPath(); g.moveTo(lx, by); g.lineTo(lx, by - bh * 0.05); g.strokePath();
+      }
+      g.beginPath();
+      g.moveTo(bx + bw * 0.15, by - bh * 0.025);
+      g.lineTo(bx + bw * 0.85, by - bh * 0.025);
+      g.strokePath();
+    } else {
+      // Police: white door panels
+      g.fillStyle(fogApply(0xDDDDDD, fogT), 0.9);
+      g.fillRect(bx + bw * 0.12, by + bh * 0.35, bw * 0.32, bh * 0.28);
+      g.fillRect(bx + bw * 0.56, by + bh * 0.35, bw * 0.32, bh * 0.28);
     }
   }
 

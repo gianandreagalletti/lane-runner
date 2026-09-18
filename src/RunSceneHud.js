@@ -76,7 +76,8 @@ export function buildHudMP(scene, allSlots) {
       fontSize: '14px', fontFamily: 'monospace', color: col, stroke: '#000', strokeThickness: 2
     }).setOrigin(isRight ? 1 : 0, 0);
 
-    const distColors = ['#DDDDDD', '#DDB870', '#9FE8E2'];
+    // Vehicle colours: ambulance white, fire truck red, police blue
+    const distColors = ['#F0F0F0', '#C4463A', '#3A5ACD'];
     const distT   = scene.add.text(isRight ? CANVAS_W - 38 : 38, yBase, '', {
       fontSize: '14px', fontFamily: 'monospace',
       color: distColors[pidx] || '#DDDDDD',

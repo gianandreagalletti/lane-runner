@@ -2,6 +2,11 @@ import Phaser from 'phaser';
 import { CANVAS_W, CANVAS_H } from './track.js';
 import { BINDINGS, PLAYER_COLOR_HEX, PLAYER_COLORS } from './controls.js';
 
+// Vehicle names and colours for display
+const VEHICLE_NAMES  = ['AMBULANCE', 'FIRE TRUCK', 'POLICE'];
+const VEHICLE_COLORS = [0xF0F0F0, 0xC4463A, 0x1A2A6C];
+const VEHICLE_STRIPES = [0xE03030, 0xFFFFFF, 0xFFFFFF];
+
 // Slot assignment: claims[slotIdx] = { inputSource: 'keyboard'|'pad', padIndex?: number }
 // Passed to PlanScene and on to RunScene via scene data
 
@@ -32,13 +37,25 @@ export class JoinScene extends Phaser.Scene {
     const startX  = (CANVAS_W - totalW) / 2 + 140;
     for (let i = 0; i < this.numSlots; i++) {
       const cx = startX + i * 320;
-      const bg  = this.add.rectangle(cx, 300, 260, 180, 0x0e1a24).setStrokeStyle(2, 0x1c3044);
-      const num = this.add.text(cx, 220, `SLOT ${i + 1}`, { fontSize: '16px', fontFamily: 'monospace', color: '#445566' }).setOrigin(0.5);
-      const status = this.add.text(cx, 290, 'EMPTY', { fontSize: '22px', fontFamily: 'monospace', color: '#2a3a44' }).setOrigin(0.5);
-      const hint   = this.add.text(cx, 330, i === 0 ? 'Pad A  or  A/D keys' : i === 1 ? 'Pad A  or  ←/→ keys' : 'Pad A  or  Q/E keys', {
+      const bg  = this.add.rectangle(cx, 310, 260, 200, 0x0e1a24).setStrokeStyle(2, 0x1c3044);
+      const num = this.add.text(cx, 225, `SLOT ${i + 1}`, { fontSize: '16px', fontFamily: 'monospace', color: '#445566' }).setOrigin(0.5);
+
+      // Small vehicle silhouette (top-view simple rect with stripe)
+      const silG = this.add.graphics();
+      const sw = 56, sh = 36;
+      silG.fillStyle(VEHICLE_COLORS[i], 0.7);
+      silG.fillRect(cx - sw / 2, 248 - sh / 2, sw, sh);
+      silG.fillStyle(VEHICLE_STRIPES[i], 0.8);
+      silG.fillRect(cx - sw / 2, 248 - 3, sw, 6);
+      silG.lineStyle(1, 0x888888, 0.4);
+      silG.strokeRect(cx - sw / 2, 248 - sh / 2, sw, sh);
+
+      const nameT = this.add.text(cx, 274, VEHICLE_NAMES[i], { fontSize: '10px', fontFamily: 'monospace', color: '#556677' }).setOrigin(0.5);
+      const status = this.add.text(cx, 298, 'EMPTY', { fontSize: '22px', fontFamily: 'monospace', color: '#2a3a44' }).setOrigin(0.5);
+      const hint   = this.add.text(cx, 336, i === 0 ? 'Pad A  or  A/D keys' : i === 1 ? 'Pad A  or  ←/→ keys' : 'Pad A  or  Q/E keys', {
         fontSize: '12px', fontFamily: 'monospace', color: '#223344'
       }).setOrigin(0.5);
-      const releasT = this.add.text(cx, 360, '', { fontSize: '11px', fontFamily: 'monospace', color: '#553333' }).setOrigin(0.5);
+      const releasT = this.add.text(cx, 362, '', { fontSize: '11px', fontFamily: 'monospace', color: '#553333' }).setOrigin(0.5);
       this._slotCards.push({ bg, num, status, hint, releasT });
     }
 

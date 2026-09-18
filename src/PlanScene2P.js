@@ -170,8 +170,10 @@ export function buildShopPicker(scene, data) {
 function _buildPanel(scene, pidx, cx, px, panelW, y0,
   PASSIVE_BUDGET, ACTIVE_BUDGET, keys, claim, onConfirm) {
 
-  const playerColors = ['#AABBCC', '#E8A33D', '#4FD1C5'];
-  const col = playerColors[pidx];
+  // Vehicle colours and names per slot
+  const vehicleColors = ['#F0F0F0', '#C4463A', '#3A5ACD'];
+  const vehicleNames  = ['AMBULANCE', 'FIRE TRUCK', 'POLICE'];
+  const col = vehicleColors[pidx];
 
   // State
   const passiveLevels = { ice_grip: 0, water_shield: 0, quick_step: 0 };
@@ -179,9 +181,9 @@ function _buildPanel(scene, pidx, cx, px, panelW, y0,
   let   cursorRow = 0;  // 0–6: passive 0–2, active 0–3
   let   confirmed = false;
 
-  // Header
-  scene.add.text(cx, y0 + 4, `P${pidx + 1} LOADOUT`, {
-    fontSize: '14px', fontFamily: 'monospace', color: col
+  // Header: vehicle name + player number
+  scene.add.text(cx, y0 + 4, `P${pidx + 1} — ${vehicleNames[pidx]}`, {
+    fontSize: '13px', fontFamily: 'monospace', color: col
   }).setOrigin(0.5, 0);
 
   // Controls hint (show actual input device)

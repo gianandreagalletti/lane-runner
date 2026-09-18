@@ -80,7 +80,8 @@ export class RunScene extends Phaser.Scene {
 
     this._players = this._matchConfig.players.map((pc, i) => new Player(this, {
       visualOffsetX: numPlayers > 1 ? PLAYER_OFFSETS[i] : 0,
-      bodyColor:     PLAYER_COLORS[i]
+      bodyColor:     PLAYER_COLORS[i],
+      vehicleIdx:    i   // 0=ambulance, 1=fire truck, 2=police
     }));
     this._obstacles = new Obstacles(this, numPlayers);
 
@@ -98,8 +99,9 @@ export class RunScene extends Phaser.Scene {
       this._warningTexts = this._state.players.map(() => this.add.text(0, 0, '', {
         fontSize: '13px', fontFamily: 'monospace', color: '#FF9900', stroke: '#000', strokeThickness: 3
       }).setOrigin(0.5, 1).setDepth(15));
+      // Vehicle label colours: ambulance white, fire truck red, police blue
       this._playerLabels = this._matchConfig.players.map((pc, i) => this.add.text(0, 0, `P${i + 1}`, {
-        fontSize: '12px', fontFamily: 'monospace', color: ['#FFFFFF', '#E8A33D', '#4FD1C5'][i] || '#FFFFFF',
+        fontSize: '12px', fontFamily: 'monospace', color: ['#F0F0F0', '#C4463A', '#3A5ACD'][i] || '#F0F0F0',
         stroke: '#000', strokeThickness: 3
       }).setOrigin(0.5, 1).setDepth(6));
     }
@@ -263,7 +265,7 @@ export class RunScene extends Phaser.Scene {
       } else if (item.type === 'projectile') {
         this._obstacles.drawProjectile(item.proj, item.zRel);
       } else {
-        this._players[item.idx].render(item.ps, cameraZ, item.idx);
+        this._players[item.idx].render(item.ps, cameraZ, item.idx, state.tick);
       }
     }
 

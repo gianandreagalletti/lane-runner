@@ -1,4 +1,94 @@
-# Session 8 — Loadout Screen Input Fix (P2/P3 Keyboard + Gamepad)
+# Session 8 — Art/Presentation Pass
+
+## Summary
+
+Full visual rework. No sim/ files touched. No collision geometry changed. Replay determinism preserved.
+
+## Changes
+
+### Req 1: Road surface — asphalt with tinted lanes
+- Lane colours: blended #2E3338 asphalt base with 12% accent (brown/grey/teal per lane).
+- Alternating segment contrast reduced to factor 0.96 ("patched tarmac", not racing stripes).
+- Kerb strips removed; replaced with solid white edge lines (8 tu wide) on outer edges of lane 0 and lane 2.
+- White dashed lane markings at internal lane boundaries (worldX = -140 and +140).
+  - Dash length 80 tu, gap 120 tu, period 200 tu.
+  - Rendered from world-absolute dash index (`di * 200`), NOT from segIdx or elapsed time.
+
+### Req 2: Guard rail replaces rock obstacle visual
+- Type 'rock' now renders as a crash barrier: two steel posts + horizontal beam.
+- Beam has black base (#14181B) with yellow (#F2C230) diagonal chevron stripes (6 stripes).
+- Thin dark grey top face for depth. No collision geometry change.
+
+### Req 3: Ice — flat decal on road
+- Type 'ice' (non-caltrop) renders as flat irregular shard polygon on road surface.
+- Colour #B8D8E8, alpha 0.85. 8 vertices, seeded from obstacle properties.
+- Crack lines from centre to 3 edge vertices. Sheen highlight ellipse at centre.
+- Shard outlines cached in `_shardCache` Map — generated once, never per frame.
+
+### Req 4: Water — flat decal, blobby
+- Type 'water' renders as flat blobby outline on road surface.
+- Colour #3AA8C4, alpha 0.75. 10 vertices, smoothed. Lighter rim outset.
+- Two ripple arcs (concentric ellipses) inside blob.
+- Blob outlines cached in `_shardCache` Map with 'blob_' key prefix.
+
+### Req 5: Vehicle billboards
+- Three distinct vehicle silhouettes: ambulance (white, BILL_H=66), fire truck (red, BILL_H=62), police (blue, BILL_H=54).
+- Each has: body rect, cabin windows, livery stripe, 4 wheels, rear lights, roof light bar.
+- Light bar flashes based on simTick: slow (every 30 ticks) at rest, fast (every 10 ticks) when sprinting.
+- Ambulance: red cross on side. Fire truck: ladder lines on roof. Police: white door panels.
+- vehicleIdx passed via Player constructor opts and RunScene uses slot index.
+
+### Req 6: Vehicle identity on other screens
+- JoinScene: vehicle silhouette (top-view rect with stripe) in each slot card. Vehicle name label below.
+- PlanScene2P: panel headers show "P1 — AMBULANCE", "P2 — FIRE TRUCK", "P3 — POLICE".
+- RunSceneHud: dist colours updated to vehicle colours (#F0F0F0 / #C4463A / #3A5ACD).
+- RunScene player labels: use vehicle colours instead of old amber/teal.
+- ResultScene: vehicle name shown below P1/P2/P3 label in MP columns.
+
+### Req 7: Caltrop visual
+- Caltrop decal renders as flat violet shard polygon with 6 spike lines radiating from centre.
+- Same shard cache system as ice.
+
+### Req 8: Snipe projectile — siren burst
+- Projectile now renders as elongated oval (siren burst shape) in caster's vehicle colour.
+- 3 trailing afterimage copies behind it at decreasing opacity.
+
+### Req 9: Pickups visual
+- caltrop_pickup (#9B6BDA): violet diamond + filled circle (road cone silhouette).
+- snipe_pickup (#7ED957): green cross/star shape.
+
+### Req 10: Planning map obstacle colours
+- rock → dark #2A2E34 with yellow (#F2C230) chevron stripe indicator, label "▓ RAIL".
+- ice → pale blue #B8D8E8, label "~ ICE".
+- water → teal #3AA8C4, label "≈ WTR".
+- Count text uses "rail" instead of "rock".
+
+### Req 11: Performance
+- No new Graphics objects created in render loop.
+- Ice/water/caltrop shard outlines generated once, cached in Map keyed by `lane_distanceScaled`.
+- Vehicle drawings use existing per-player Graphics objects, cleared each frame.
+- Target: 60fps with 3 players. Lane dash pass adds ~40 fillPoints calls (one per visible dash × 2 boundaries). Overall overhead negligible compared to existing ~40 lane segment quads.
+
+## Colour reference (Session 8)
+
+| Element              | Hex          |
+|----------------------|--------------|
+| Asphalt base         | #2E3338      |
+| Guard rail beam      | #14181B      |
+| Guard rail chevrons  | #F2C230      |
+| Guard rail posts     | #8090A0      |
+| Ice decal            | #B8D8E8      |
+| Water decal          | #3AA8C4      |
+| Caltrop decal        | #9B6BDA      |
+| Ambulance body       | #F0F0F0      |
+| Fire truck body      | #C4463A      |
+| Police body          | #1A2A6C      |
+| caltrop_pickup       | #9B6BDA      |
+| snipe_pickup         | #7ED957      |
+
+---
+
+# Session 8 (old title) — Loadout Screen Input Fix (P2/P3 Keyboard + Gamepad)
 
 ## Bug cause
 

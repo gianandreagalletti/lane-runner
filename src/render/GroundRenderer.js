@@ -5,24 +5,33 @@
 import { PROJ, LANE_TU, LANE_HALF_TU, project, getProjectionState } from './projection.js';
 import { CANVAS_W, CANVAS_H } from '../track.js';
 
-// Lane edge worldX positions in track units
-// Each lane has a left and right edge at ±LANE_HALF_TU from its centre
-// Plus outer kerb strips 26 tu wide beyond lane 0 and lane 2
+// Asphalt base colour
+const ASPHALT_BASE = 0x2E3338;
+// Lane accent colours (blended at 12% into asphalt)
+const LANE_ACCENTS = [0x8B6F47, 0x9AA5B1, 0x4A90A4];
 
-const KERB_W = 26; // track units
+// Blend two hex colours: base * (1-t) + accent * t
+function blendHex(base, accent, t) {
+  const rb = (base >> 16) & 0xFF, gb = (base >> 8) & 0xFF, bb = base & 0xFF;
+  const ra = (accent >> 16) & 0xFF, ga = (accent >> 8) & 0xFF, ba = accent & 0xFF;
+  const r = Math.round(rb * (1 - t) + ra * t);
+  const g = Math.round(gb * (1 - t) + ga * t);
+  const b = Math.round(bb * (1 - t) + ba * t);
+  return (r << 16) | (g << 8) | b;
+}
+
+// Precompute lane base colours (asphalt + 12% accent tint)
+const LANE_BASE_COLORS = LANE_ACCENTS.map(a => blendHex(ASPHALT_BASE, a, 0.12));
+// Alternating segment factor — very faint, "patched tarmac"
+const LANE_ALT_FACTOR = 0.96;
 
 // Compute all lane left/right edges
 function getLaneEdges() {
   // Lane 0: -240 ± 100 → [-340, -140]
   // Lane 1:    0 ± 100 → [-100,  100]
   // Lane 2:  240 ± 100 → [ 140,  340]
-  // 40-unit gap between adjacent lanes (LANE_PITCH - 2*LANE_HALF_TU = 240-200 = 40).
   return LANE_TU.map(c => ({ left: c - LANE_HALF_TU, right: c + LANE_HALF_TU }));
 }
-
-// Lane colours matching track.js LANE_COLORS
-const LANE_COLORS = [0x8B6F47, 0x9AA5B1, 0x4A90A4];
-const LANE_DARK_FACTOR = 0.88; // alternate segment darkness
 
 // Parse 0xRRGGBB to {r,g,b}
 function hexToRgb(hex) {
@@ -49,7 +58,16 @@ const SKY_TOP   = 0x111C2B;
 const SKY_HORIZ = 0x3C5A6B;
 const GND_HORIZ = 0x22323E;
 const GND_BOT   = 0x131C24;
-const KERB_COLOR = 0xCCBB99;
+
+// Edge line width in track units (outer edges of lane 0 and lane 2)
+const EDGE_LINE_W = 8;
+
+// Lane dash constants (world-absolute, pure function of z)
+const DASH_LENGTH = 80;    // track units
+const DASH_PERIOD = 200;   // track units
+// Boundary X positions between lanes (in track units)
+const LANE_BOUNDS = [-140, 140];  // between lane 0/1 and lane 1/2
+const DASH_HALF_W = 4;            // track units (8 tu wide total)
 
 export class GroundRenderer {
   constructor(scene) {
@@ -124,7 +142,7 @@ export class GroundRenderer {
       // segIndex is a world-absolute integer so this is a pure function of world position.
       const altSeg = segIndex % 2 === 1;
 
-      // Draw lanes
+      // Draw lanes with asphalt-tinted colours
       for (let li = 0; li < 3; li++) {
         const lx = edges[li].left;
         const rx = edges[li].right;
@@ -134,8 +152,9 @@ export class GroundRenderer {
         const nl = project(lx, zRelNear);
         const nr = project(rx, zRelNear);
 
-        let col = LANE_COLORS[li];
-        if (altSeg) col = darken(col, LANE_DARK_FACTOR);
+        let col = LANE_BASE_COLORS[li];
+        // Very faint alternating "patched tarmac" effect
+        if (altSeg) col = darken(col, LANE_ALT_FACTOR);
         col = fogBlend(col, FOG_COLOR, fogT);
 
         g.fillStyle(col, 1);
@@ -147,38 +166,77 @@ export class GroundRenderer {
         ], true);
       }
 
-      // Outer kerb strips
-      // Left kerb: from lane 0 left edge, going left by KERB_W
+      // --- Solid white edge lines (outer edges of lane 0 and lane 2) ---
+      const edgeColor = fogBlend(0xFFFFFF, FOG_COLOR, fogT);
+
+      // Left edge line: worldX = -348 to -340 (8 tu wide on the outer edge of lane 0)
       {
-        const kRightX = edges[0].left;
-        const kLeftX  = kRightX - KERB_W;
-        const fl = project(kLeftX,  zRelFar);
-        const fr = project(kRightX, zRelFar);
-        const nl = project(kLeftX,  zRelNear);
-        const nr = project(kRightX, zRelNear);
-        let col = altSeg ? darken(KERB_COLOR, LANE_DARK_FACTOR) : KERB_COLOR;
-        col = fogBlend(col, FOG_COLOR, fogT);
-        g.fillStyle(col, 1);
+        const lx = edges[0].left - EDGE_LINE_W;
+        const rx = edges[0].left;
+        const fl = project(lx, zRelFar);
+        const fr = project(rx, zRelFar);
+        const nl = project(lx, zRelNear);
+        const nr = project(rx, zRelNear);
+        g.fillStyle(edgeColor, 0.85);
         g.fillPoints([
           { x: fl.x, y: fl.y }, { x: fr.x, y: fr.y },
           { x: nr.x, y: nr.y }, { x: nl.x, y: nl.y },
         ], true);
       }
 
-      // Right kerb: from lane 2 right edge, going right by KERB_W
+      // Right edge line: worldX = +340 to +348 (8 tu wide on the outer edge of lane 2)
       {
-        const kLeftX  = edges[2].right;
-        const kRightX = kLeftX + KERB_W;
-        const fl = project(kLeftX,  zRelFar);
-        const fr = project(kRightX, zRelFar);
-        const nl = project(kLeftX,  zRelNear);
-        const nr = project(kRightX, zRelNear);
-        let col = altSeg ? darken(KERB_COLOR, LANE_DARK_FACTOR) : KERB_COLOR;
-        col = fogBlend(col, FOG_COLOR, fogT);
-        g.fillStyle(col, 1);
+        const lx = edges[2].right;
+        const rx = edges[2].right + EDGE_LINE_W;
+        const fl = project(lx, zRelFar);
+        const fr = project(rx, zRelFar);
+        const nl = project(lx, zRelNear);
+        const nr = project(rx, zRelNear);
+        g.fillStyle(edgeColor, 0.85);
         g.fillPoints([
           { x: fl.x, y: fl.y }, { x: fr.x, y: fr.y },
           { x: nr.x, y: nr.y }, { x: nl.x, y: nl.y },
+        ], true);
+      }
+    }
+
+    // --- Lane dashes — separate pass, world-absolute index loop ---
+    // Dashes are a pure function of world z: dash i covers [i*200, i*200+80].
+    // This pass iterates dash indices, not segment indices.
+    const firstDash = Math.floor((cameraZ + PROJ.NEAR_CLAMP + 10) / DASH_PERIOD);
+    const lastDash  = Math.floor((cameraZ + PROJ.DRAW_DISTANCE)   / DASH_PERIOD);
+
+    for (let di = firstDash; di <= lastDash; di++) {
+      const zNearAbs = di * DASH_PERIOD;
+      const zFarAbs  = zNearAbs + DASH_LENGTH;  // dash length = 80
+      const zRelNear = zNearAbs - cameraZ;
+      const zRelFar  = zFarAbs  - cameraZ;
+
+      if (zRelNear > PROJ.DRAW_DISTANCE || zRelFar < PROJ.NEAR_CLAMP + 10) continue;
+
+      // Clamp to visible range
+      const zrn = Math.max(zRelNear, PROJ.NEAR_CLAMP + 10);
+      const zrf = Math.min(zRelFar,  PROJ.DRAW_DISTANCE);
+
+      // Fog at midpoint
+      const zMid = (zrn + zrf) / 2;
+      const fogT = PROJ.FOG_ENABLED
+        ? Math.min(Math.pow(zMid / PROJ.DRAW_DISTANCE, 2), 0.82) * PROJ.PERSPECTIVE_BLEND
+        : 0;
+      const dashColor = fogBlend(0xFFFFFF, FOG_COLOR, fogT);
+
+      // Draw dash at both internal lane boundaries
+      for (const bx of LANE_BOUNDS) {
+        const fl = project(bx - DASH_HALF_W, zrf);
+        const fr = project(bx + DASH_HALF_W, zrf);
+        const nl = project(bx - DASH_HALF_W, zrn);
+        const nr = project(bx + DASH_HALF_W, zrn);
+        g.fillStyle(dashColor, 0.7);
+        g.fillPoints([
+          { x: fl.x, y: fl.y },
+          { x: fr.x, y: fr.y },
+          { x: nr.x, y: nr.y },
+          { x: nl.x, y: nl.y },
         ], true);
       }
     }

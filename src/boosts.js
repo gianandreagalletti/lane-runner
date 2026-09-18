@@ -44,9 +44,9 @@ export const BOOSTS = {
   },
   caltrop: {
     id:         'caltrop',
-    name:       'Caltrop',
+    name:       'Road Debris',
     type:       'active',
-    description: 'Place a slow trap behind you'
+    description: 'Scatter debris behind you to slow pursuers'
   },
   snipe_shot: {
     id:         'snipe_shot',
