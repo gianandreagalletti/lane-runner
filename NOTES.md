@@ -1,3 +1,73 @@
+## Menu Layout Fix (post-Session 11)
+
+### Bug
+`_drawModeToggle` (player-count control, y=292, h=28) and the first track button
+(y=318, h=72, spans 282-354) overlapped by 24px — both hand-placed constants that
+never referenced each other, and drifted into collision once track buttons were
+added below the toggle. The player-count control was completely unclickable: the
+track button, added later in the display list, sat on top of it for input purposes.
+Same failure mode as the ConfigScene overlap (see "Config Layout Fix" above) —
+this screen had just never been brought under that layout discipline.
+
+### Fix
+Extracted `RowCursor` and the dev-mode overlap/bounds assertion out of ConfigScene
+into a shared `src/layout.js`, so both screens run the *same* check instead of each
+screen growing its own copy. Added `layoutColumn()`: divides a screen into named
+regions (`header` / `playerSelect` / `trackSelect` / `footer`) top-to-bottom with
+an enforced gap, at most one of which may be `'flex'` (consumes remaining space).
+
+MenuScene rebuilt on top of this: mode toggle lives entirely inside `playerSelect`;
+track buttons live inside `trackSelect`, in a container clipped with a GeometryMask
+(`make.graphics({add:false})` — see the earlier ConfigScene preview-mask bug for
+why `add.graphics()` there silently renders a white/filled rect instead of clipping).
+Track content overflows its region (5 buttons need 380px, region is 258px), so it
+scrolls via mouse wheel; items are only interactive (`bg.input.enabled`) when their
+*current* scrolled position is fully inside the region — masking hides the visual,
+this separately guards the hit-box, matching the "check both, not just the visual"
+rule from the ConfigScene fix.
+
+`assertLayoutItems()` gained an optional parent-region containment check, but it's
+only meaningful for *static* controls (mode toggle, footer buttons) — a scrollable
+region's children are legitimately allowed to extend past their region's edge when
+unscrolled (that's what makes them scrollable), so checking their raw rect against
+the region produces false positives once content overflows. Static controls and
+scrollable-region children are asserted separately for this reason.
+
+### Verified
+No headless-browser test tool was available in this environment (no Playwright/
+chromium-cli installed, and installing one wasn't done without asking first).
+Verified two ways instead: (1) `scripts/test-menu-layout.js` replays the exact
+region/button math from MenuScene.js through the same overlap/containment checks,
+including a negative test that deliberately reintroduces the overlap and confirms
+both offending names are reported; (2) drove a real headless Chrome instance via
+raw CDP over Node's built-in WebSocket (no new dependency), clicked the "2 PLAYERS"
+button, scrolled the track list, and confirmed screenshots + zero console
+warnings/errors — see the three PNGs from that run for the visual record.
+
+### Worth doing next
+This is the second screen (after the configurator) found with hand-placed
+coordinates that had silently gone stale. Audited the rest (not fixed):
+
+- **PlanScene.js — HIGH risk.** `_drawShop()`'s passive-row Ys (162/196/230),
+  active-row Ys (286/320/354/388), and the Start button (`btnY = 430`) are four
+  independent hand-typed constants. Adding one more passive/active row means
+  manually retyping every constant below it — exactly the drift that broke
+  ConfigScene and MenuScene. No layout abstraction in the file at all.
+- **PlanScene2P.js — HIGH risk.** `_buildPanel()`'s 7 interactive rows sit only
+  3-14px away from `emptyWarnT`/`statusT`/the confirm button below them. One
+  longer boost name or an 8th row collides directly with the confirm button.
+- **ResultScene.js — MEDIUM.** Retry/Menu buttons don't collide with each other,
+  but the loadout list grows dynamically (`264 + i*22`, up to ~y=396) straight
+  into the fixed-position XP section — not a control-vs-control overlap yet, but
+  the same "nothing recomputes when content grows" pattern.
+- **JoinScene.js / ControlsScene.js / OnboardScene.js — LOW.** Each has at most
+  one interactive element, so there's nothing for it to collide with.
+
+PlanScene and PlanScene2P are real candidates for the next occurrence of this bug
+class and should move to `src/layout.js` before they fail rather than after.
+
+---
+
 # Session 11 — Track Generator + Config Scene
 
 ## Summary

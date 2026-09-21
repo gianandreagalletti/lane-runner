@@ -5,6 +5,7 @@ import { BINDINGS } from './controls.js';
 import { generateTrack, PRESETS } from '../sim/trackGen.js';
 import { validateBandList } from '../sim/validateTrack.js';
 import { getAllTracks, saveTrack, deleteTrack, computeEstimate } from './TrackStore.js';
+import { assertLayoutItems as _sharedAssertLayoutItems, RowCursor } from './layout.js';
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 const HEADER_H  = 56;
@@ -49,35 +50,9 @@ const P_ROW_H   = 28;
 const P_ROW_GAP = 4;
 
 // ─── Dev layout assertions ────────────────────────────────────────────────────
-const _IS_DEV = typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-
+// (shared with MenuScene — see ./layout.js — so every screen runs the same check)
 function _assertLayoutItems(items) {
-  if (!_IS_DEV) return;
-  for (let i = 0; i < items.length; i++) {
-    const { name, x, y, w, h } = items[i];
-    if (!isFinite(x) || !isFinite(y) || !isFinite(w) || !isFinite(h)) {
-      console.warn(`LAYOUT [${name}] non-finite dimension: {${x},${y},${w},${h}}`);
-    } else if (w <= 0 || h <= 0) {
-      console.warn(`LAYOUT [${name}] zero/negative dimension: {${x},${y},${w},${h}}`);
-    } else {
-      if (x < 0 || y < 0 || x + w > CANVAS_W || y + h > CANVAS_H) {
-        console.warn(`LAYOUT [${name}] out of canvas: {${x},${y},${w},${h}}`);
-      }
-      for (let j = i + 1; j < items.length; j++) {
-        const b = items[j];
-        if (x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y) {
-          console.warn(`LAYOUT "${name}" overlaps "${b.name}": {${x},${y},${w},${h}} vs {${b.x},${b.y},${b.w},${b.h}}`);
-        }
-      }
-    }
-  }
-}
-
-// ─── RowCursor ────────────────────────────────────────────────────────────────
-class RowCursor {
-  constructor(startY) { this._y = startY; }
-  slot(h, gap = 4) { const y = this._y; this._y += h + gap; return y; }
-  get y() { return this._y; }
+  _sharedAssertLayoutItems(items, CANVAS_W, CANVAS_H);
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
